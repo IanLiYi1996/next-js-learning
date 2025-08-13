@@ -176,11 +176,11 @@ export default function MainPage({ session, children }: MainPageProps) {
             <h1 className="text-xl font-semibold">
               {navItems.find(item => item.href === pathname)?.title || '首页'}  
             </h1>
-            <div className="ml-auto">
+            {/* <div className="ml-auto">
               <span className="text-xs text-muted-foreground hidden sm:inline">
                 快捷键: ⌘B / Ctrl+B
               </span>
-            </div>
+            </div> */}
           </header>
           
           <div className="flex-1 overflow-auto p-6">
