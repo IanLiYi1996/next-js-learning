@@ -30,7 +30,7 @@ export default function Page() {
           <form
             action={async () => {
               'use server';
-              await signIn('cognito');
+              await signIn('cognito', { redirectTo: '/' });
             }}
             className="w-full"
           >

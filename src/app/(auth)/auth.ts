@@ -40,6 +40,13 @@ export const {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
+    },
     async jwt({ token, account }) {
       // need to handle token refresh https://next-auth.js.org/tutorials/refresh-token-rotation
       // Persist the OAuth access_token and or the user id to the token right after signin
