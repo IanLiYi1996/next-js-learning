@@ -1,4 +1,4 @@
-import { auth } from '@/app/(auth)/auth';
+import { auth } from '../(auth)/auth';
 import { redirect } from 'next/navigation';
 import AgentGalleryPage from '@/components/AgentGalleryPage';
 import MainPage from '@/components/main-page';
