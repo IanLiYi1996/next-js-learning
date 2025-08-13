@@ -25,6 +25,11 @@ export const {
   signOut,
 } = NextAuth({
   ...authConfig,
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  debug: process.env.NODE_ENV === 'development',
   providers: [
     CognitoProvider({
       clientId: process.env.AUTH_COGNITO_ID ?? '',

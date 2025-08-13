@@ -1,8 +1,9 @@
-import { auth } from './(auth)/auth';
+import { auth } from '@/app/(auth)/auth';
 import { redirect } from 'next/navigation';
-import MainPage from '../components/main-page';
+import AgentGalleryPage from '@/components/AgentGalleryPage';
+import MainPage from '@/components/main-page';
 
-export default async function HomePage() {
+export default async function AgentsPage() {
   let session;
   
   try {
@@ -17,5 +18,9 @@ export default async function HomePage() {
     redirect('/api/auth/signin');
   }
 
-  return <MainPage session={session} />;
+  return (
+    <MainPage session={session}>
+      <AgentGalleryPage session={session} />
+    </MainPage>
+  );
 }
