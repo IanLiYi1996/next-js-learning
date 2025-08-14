@@ -1,10 +1,11 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import type { ChatMessage } from '@ai-sdk/react';
+import type { Message } from 'ai';
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, Trash, Copy, Paperclip } from 'lucide-react';
+import { Send, Loader2, Trash, Copy, Paperclip, Image as ImageIcon, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,23 +13,94 @@ import rehypeHighlight from 'rehype-highlight';
 
 export default function Chat() {
   const [copied, setCopied] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string>('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
   
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
-    api: '/api/chat',
-    // 可以添加一些配置项
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: '您好！我是AI助手，有什么可以帮您的吗？'
-      }
-    ],
-    onError: (error) => {
-      console.error('聊天错误:', error);
+  // 创建一个简单的自定义提交处理函数
+  const [chatMessages, setChatMessages] = useState<Array<{id: string, content: string, role: 'user' | 'assistant'}>>([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      content: '您好！我是AI助手，有什么可以帮您的吗？'
     }
-  });
+  ]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatError, setChatError] = useState<Error | null>(null);
+  
+  // 模拟API调用
+  const handleCustomSubmit = async (e: React.FormEvent, options: any = {}) => {
+    e.preventDefault();
+    
+    if (!chatInput.trim() && !files?.length) return;
+    
+    try {
+      // 添加用户消息到聊天
+      const userMessageId = Date.now().toString();
+      const userMessage = {
+        id: userMessageId,
+        content: chatInput,
+        role: 'user' as const
+      };
+      
+      setChatMessages(prev => [...prev, userMessage]);
+      setChatInput('');
+      setIsProcessing(true);
+      
+      // 创建请求体
+      const requestBody = {
+        messages: [...chatMessages, userMessage],
+        apiKey,
+        experimental_attachments: files || undefined
+      };
+      
+      // 发送请求到API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!response.ok) {
+        throw new Error('API请求失败');
+      }
+      
+      // 读取响应
+      const responseText = await response.text();
+      
+      // 添加助手回复
+      setChatMessages(prev => [
+        ...prev, 
+        {
+          id: `response-${userMessageId}`,
+          content: responseText,
+          role: 'assistant'
+        }
+      ]);
+      
+    } catch (error) {
+      console.error('聊天错误:', error);
+      setChatError(error instanceof Error ? error : new Error('未知错误'));
+    } finally {
+      setIsProcessing(false);
+      setFiles(null);
+    }
+  };
+  
+  // 这些变量映射到useChat返回的变量，方便我们重用原有代码
+  const messages = chatMessages;
+  const input = chatInput;
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => setChatInput(e.target.value);
+  const isLoading = isProcessing;
+  const error = chatError;
+  const setMessages = setChatMessages;
+  const handleSubmit = handleCustomSubmit;
   
   // 复制消息内容
   const copyToClipboard = (content: string, id: string) => {
@@ -66,7 +138,38 @@ export default function Chat() {
       )}
       
       {/* 工具栏 */}
-      <div className="flex justify-end px-4 py-1 border-b">
+      <div className="flex justify-between px-4 py-1 border-b">
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+            className="h-8 text-xs"
+          >
+            {showApiKeyInput ? '隐藏API密钥' : '设置API密钥'}
+          </Button>
+          
+          {showApiKeyInput && (
+            <div className="ml-2 flex items-center gap-2">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="输入OpenAI API密钥"
+                className="border text-xs px-2 py-1 rounded w-48"
+              />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 text-xs px-2" 
+                onClick={() => setApiKey('')}
+              >
+                清除
+              </Button>
+            </div>
+          )}
+        </div>
+        
         <Button
           variant="ghost"
           size="sm"
@@ -78,14 +181,62 @@ export default function Chat() {
         </Button>
       </div>
       
+      {/* Drag overlay */}
+      <AnimatePresence>
+        {isDragging && (
+          <motion.div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="text-center bg-muted/50 p-6 rounded-lg border-2 border-dashed border-primary">
+              <div className="flex flex-col items-center gap-2">
+                <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                <div className="text-lg font-medium">拖放文件到这里上传</div>
+                <div className="text-sm text-muted-foreground">(仅支持图片和文本文件)</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
       {/* Messages display area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div 
+        className="flex-1 overflow-y-auto p-3 space-y-3"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const droppedFiles = e.dataTransfer.files;
+          
+          if (droppedFiles.length > 0) {
+            const validFiles = Array.from(droppedFiles).filter(
+              (file) => file.type.startsWith("image/") || file.type.startsWith("text/")
+            );
+            
+            if (validFiles.length === droppedFiles.length) {
+              setFiles(droppedFiles);
+            } else {
+              // 可以添加一个错误提示
+              console.error("只支持图片和文本文件");
+            }
+          }
+        }}
+      >
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             <p>开始与AI助手对话吧！</p>
           </div>
         ) : (
-          messages.map((message: ChatMessage) => {
+          messages.map((message: any) => {
             const isUser = message.role === 'user';
             return (
               <div
@@ -146,7 +297,18 @@ export default function Chat() {
       
       {/* Input area */}
       <form 
-        onSubmit={handleSubmit} 
+        onSubmit={(e) => {
+          e.preventDefault(); // 阻止表单默认提交行为
+          const options: any = files ? { experimental_attachments: files } : {};
+          
+          // 如果用户输入了API密钥，添加到请求选项中
+          if (apiKey) {
+            options.apiKey = apiKey;
+          }
+          
+          handleSubmit(e, options);
+          setFiles(null);
+        }} 
         className="border-t p-3 flex flex-col gap-2"
       >
         <div className="flex w-full items-end gap-2">
@@ -158,20 +320,38 @@ export default function Chat() {
               placeholder="输入您的问题..."
               rows={2}
               disabled={isLoading}
+              onPaste={(e) => {
+                const items = e.clipboardData?.items;
+                if (items) {
+                  const clipboardFiles = Array.from(items)
+                    .filter(item => item.kind === 'file')
+                    .map(item => item.getAsFile())
+                    .filter((file): file is File => file !== null);
+                    
+                  if (clipboardFiles.length > 0) {
+                    const dataTransfer = new DataTransfer();
+                    clipboardFiles.forEach(file => dataTransfer.items.add(file));
+                    setFiles(dataTransfer.files);
+                  }
+                }
+              }}
             />
           </div>
           
           <input
             type="file"
             id="file-upload"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => setFiles(e.target.files)}
             className="hidden"
+            multiple
+            accept="image/*,text/*"
+            ref={fileInputRef}
           />
           
           <Button 
             type="button" 
             variant="outline"
-            onClick={() => document.getElementById('file-upload')?.click()}
+            onClick={() => fileInputRef.current?.click()}
             className="h-[60px] w-[60px] rounded-md flex-shrink-0"
             disabled={isLoading}
           >
@@ -180,7 +360,7 @@ export default function Chat() {
           
           <Button 
             type="submit" 
-            disabled={isLoading || !input || input.trim() === ''}
+            disabled={isLoading}
             className="h-[60px] w-[60px] rounded-md flex-shrink-0"
           >
             {isLoading ? (
@@ -191,21 +371,71 @@ export default function Chat() {
           </Button>
         </div>
         
-        {file && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground px-2">
-            <Paperclip className="h-4 w-4" />
-            <span className="truncate">{file.name}</span>
-            <Button 
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-4 w-4 p-0 ml-auto"
-              onClick={() => setFile(null)}
+        <AnimatePresence>
+          {files && files.length > 0 && (
+            <motion.div 
+              className="flex flex-wrap gap-2"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
             >
-              ×
-            </Button>
-          </div>
-        )}
+              {Array.from(files).map((file, index) => (
+                <motion.div
+                  key={`${file.name}-${index}`}
+                  className="relative group"
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                >
+                  {file.type.startsWith('image/') ? (
+                    <div className="relative h-16 w-16 rounded-md overflow-hidden border border-border">
+                      <img 
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="h-full w-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-0 right-0 h-4 w-4 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => {
+                          const dt = new DataTransfer();
+                          Array.from(files).forEach((f, i) => {
+                            if (i !== index) dt.items.add(f);
+                          });
+                          setFiles(dt.files.length > 0 ? dt.files : null);
+                        }}
+                      >
+                        <X className="h-2 w-2" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative h-16 w-24 p-1 text-[10px] leading-tight overflow-hidden rounded-md border border-border bg-muted/50">
+                      <div className="font-medium truncate">{file.name}</div>
+                      <div className="text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-0 right-0 h-4 w-4 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => {
+                          const dt = new DataTransfer();
+                          Array.from(files).forEach((f, i) => {
+                            if (i !== index) dt.items.add(f);
+                          });
+                          setFiles(dt.files.length > 0 ? dt.files : null);
+                        }}
+                      >
+                        <X className="h-2 w-2" />
+                      </Button>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </form>
     </div>
   );
