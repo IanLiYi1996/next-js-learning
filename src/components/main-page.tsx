@@ -179,7 +179,7 @@ export default function MainPage({ session, children }: MainPageProps) {
             </Tooltip>
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-xl font-semibold">
-              {navItems.find(item => item.href === pathname)?.title || '首页'}  
+              {navItems.find(item => pathname.startsWith(item.href) && item.href !== '/' || pathname === item.href)?.title || '首页'}  
             </h1>
             {/* <div className="ml-auto">
               <span className="text-xs text-muted-foreground hidden sm:inline">

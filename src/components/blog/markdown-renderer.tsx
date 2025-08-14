@@ -25,11 +25,11 @@ const CodeBlock = ({ node, className, children, ...props }: any) => {
         </button>
       </div>
       {language && (
-        <div className="absolute top-2 left-2 text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+        <div className="absolute top-3 left-3 text-xs text-muted-foreground bg-muted/80 px-2 py-1 rounded shadow-sm">
           {language}
         </div>
       )}
-      <pre className={cn("p-4 overflow-x-auto rounded-lg mt-6 bg-muted text-muted-foreground", className)} {...props}>
+      <pre className={cn("pt-10 px-4 pb-4 overflow-x-auto rounded-lg mt-6 bg-muted text-muted-foreground", className)} {...props}>
         <code className={cn("text-sm", className)} {...props}>
           {children}
         </code>
