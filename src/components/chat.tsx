@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import type { ChatMessage } from '@ai-sdk/react';
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, Trash, Copy } from 'lucide-react';
+import { Send, Loader2, Trash, Copy, Paperclip } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,6 +12,8 @@ import rehypeHighlight from 'rehype-highlight';
 
 export default function Chat() {
   const [copied, setCopied] = useState<string | null>(null);
+  
+  const [file, setFile] = useState<File | null>(null);
   
   const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
     api: '/api/chat',
@@ -145,29 +147,65 @@ export default function Chat() {
       {/* Input area */}
       <form 
         onSubmit={handleSubmit} 
-        className="border-t p-3 flex gap-2 items-end"
+        className="border-t p-3 flex flex-col gap-2"
       >
-        <div className="flex-1 relative">
-          <textarea
-            className="resize-none w-full border rounded-md p-2 pr-10 focus:outline-none focus:ring-1 focus:ring-primary h-[60px] text-sm"
-            value={input}
-            onChange={handleInputChange}
-            placeholder="输入您的问题..."
-            rows={2}
-            disabled={isLoading}
+        <div className="flex w-full items-end gap-2">
+          <div className="flex-1 relative">
+            <textarea
+              className="resize-none w-full border rounded-md p-2 pr-10 focus:outline-none focus:ring-1 focus:ring-primary h-[60px] text-sm"
+              value={input}
+              onChange={handleInputChange}
+              placeholder="输入您的问题..."
+              rows={2}
+              disabled={isLoading}
+            />
+          </div>
+          
+          <input
+            type="file"
+            id="file-upload"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="hidden"
           />
+          
+          <Button 
+            type="button" 
+            variant="outline"
+            onClick={() => document.getElementById('file-upload')?.click()}
+            className="h-[60px] w-[60px] rounded-md flex-shrink-0"
+            disabled={isLoading}
+          >
+            <Paperclip className="h-5 w-5" />
+          </Button>
+          
+          <Button 
+            type="submit" 
+            disabled={isLoading || !input || input.trim() === ''}
+            className="h-[60px] w-[60px] rounded-md flex-shrink-0"
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
+          </Button>
         </div>
-        <Button 
-          type="submit" 
-          disabled={isLoading || !input || input.trim() === ''}
-          className="h-[60px] w-[60px] rounded-md"
-        >
-          {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Send className="h-5 w-5" />
-          )}
-        </Button>
+        
+        {file && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground px-2">
+            <Paperclip className="h-4 w-4" />
+            <span className="truncate">{file.name}</span>
+            <Button 
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-4 w-4 p-0 ml-auto"
+              onClick={() => setFile(null)}
+            >
+              ×
+            </Button>
+          </div>
+        )}
       </form>
     </div>
   );
