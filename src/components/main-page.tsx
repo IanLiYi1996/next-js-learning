@@ -3,7 +3,7 @@
 import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Bot, Settings, User, LogOut } from 'lucide-react';
+import { Home, Bot, Settings, User, LogOut, BookOpen } from 'lucide-react';
 import { handleSignOut } from '@/lib/actions';
 import {
   Sidebar,
@@ -40,6 +40,11 @@ const navItems = [
     title: '首页',
     href: '/',
     icon: Home,
+  },
+  {
+    title: '博客',
+    href: '/blog',
+    icon: BookOpen,
   },
   {
     title: 'Agent Gallery',
