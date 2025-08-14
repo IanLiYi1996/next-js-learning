@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Bot, Settings, User, LogOut, BookOpen } from 'lucide-react';
 import { handleSignOut } from '@/lib/actions';
+import Chat from '@/components/chat';
 import {
   Sidebar,
   SidebarContent,
@@ -188,28 +189,11 @@ export default function MainPage({ session, children }: MainPageProps) {
             </div> */}
           </header>
           
-          <div className="flex-1 overflow-auto p-6">
-            <div className="mx-auto max-w-7xl">
+          <div className="flex-1 overflow-auto">
+            <div className="mx-auto h-full max-w-4xl">
               {children || (
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                  <div className="aspect-video rounded-xl bg-muted/50 p-4">
-                    <h3 className="text-lg font-medium mb-2">欢迎回来</h3>
-                    <p className="text-sm text-muted-foreground">
-                      欢迎使用 AI Assistant！侧边栏可以折叠为图标模式，点击 <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded text-xs font-mono">🤖</span> 图标或使用快捷键 <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">⌘B</kbd> 来切换。
-                    </p>
-                  </div>
-                  <div className="aspect-video rounded-xl bg-muted/50 p-4">
-                    <h3 className="text-lg font-medium mb-2">快速开始</h3>
-                    <p className="text-sm text-muted-foreground">
-                      点击左侧的 &ldquo;Agent Gallery&rdquo; 查看可用的 AI 代理，或访问设置页面配置您的偏好。
-                    </p>
-                  </div>
-                  <div className="aspect-video rounded-xl bg-muted/50 p-4">
-                    <h3 className="text-lg font-medium mb-2">用户信息</h3>
-                    <p className="text-sm text-muted-foreground">
-                      当前用户: {session.user?.name || session.user?.email}
-                    </p>
-                  </div>
+                <div className="h-full">
+                  <Chat />
                 </div>
               )}
             </div>
