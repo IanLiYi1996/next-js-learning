@@ -2,13 +2,23 @@
 
 import { format, parseISO } from 'date-fns';
 import { Post } from './blog-data';
+import { useTranslations } from '@/hooks/use-translations';
 
 /**
  * 格式化日期（客户端版本）
+ * 根据当前语言环境格式化日期
+ * 中文: yyyy年MM月dd日
+ * 英文: MMMM d, yyyy
  */
 export function formatDate(date: string): string {
+  const { locale } = useTranslations();
   const parsedDate = parseISO(date);
-  return format(parsedDate, 'yyyy年MM月dd日');
+  
+  if (locale === 'zh') {
+    return format(parsedDate, 'yyyy年MM月dd日');
+  } else {
+    return format(parsedDate, 'MMMM d, yyyy');
+  }
 }
 
 /**

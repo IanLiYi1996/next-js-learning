@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Bot, Settings, User, LogOut, BookOpen } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { LocaleSwitcher } from '@/components/locale-switcher';
+import { useTranslations } from '@/hooks/use-translations';
 import { handleSignOut } from '@/lib/actions';
 import Chat from '@/components/chat';
 import {
@@ -37,29 +39,29 @@ interface MainPageProps {
 }
 
 // Navigation items
-const navItems = [
+const getNavItems = (t: (key: string) => string) => [
   {
-    title: '首页',
+    title: t('nav.home'),
     href: '/',
     icon: Home,
   },
   {
-    title: '博客',
+    title: t('nav.blog'),
     href: '/blog',
     icon: BookOpen,
   },
   {
-    title: 'Agent Gallery',
+    title: t('nav.agents'),
     href: '/agents',
     icon: Bot,
   },
   {
-    title: '设置',
+    title: t('nav.settings'),
     href: '/settings',
     icon: Settings,
   },
   {
-    title: '个人资料',
+    title: t('nav.profile'),
     href: '/profile',
     icon: User,
   },
@@ -67,6 +69,8 @@ const navItems = [
 
 export default function MainPage({ session, children }: MainPageProps) {
   const pathname = usePathname();
+  const { t } = useTranslations();
+  const navItems = getNavItems(t);
 
   return (
     <SidebarProvider>
@@ -83,10 +87,10 @@ export default function MainPage({ session, children }: MainPageProps) {
                     </SidebarTrigger>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    <p>切换侧边栏 (⌘B / Ctrl+B)</p>
+                    <p>{t('actions.toggleSidebar')}</p>
                   </TooltipContent>
                 </Tooltip>
-                <span className="font-semibold group-data-[collapsible=icon]:hidden">AI Assistant</span>
+                <span className="font-semibold group-data-[collapsible=icon]:hidden">{t('nav.aiAssistant')}</span>
               </div>
               <div className="group-data-[collapsible=icon]:hidden">
                 <Tooltip>
@@ -94,7 +98,7 @@ export default function MainPage({ session, children }: MainPageProps) {
                     <SidebarTrigger className="hover:bg-accent hover:text-accent-foreground transition-colors" />
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    <p>收起侧边栏 (⌘B / Ctrl+B)</p>
+                    <p>{t('actions.collapseSidebar')}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -161,7 +165,7 @@ export default function MainPage({ session, children }: MainPageProps) {
                     className="w-full justify-start"
                   >
                     <LogOut className="h-4 w-4 mr-2" />
-                    退出登录
+                    {t('actions.logout')}
                   </Button>
                 </form>
               </SidebarMenuItem>
@@ -176,14 +180,15 @@ export default function MainPage({ session, children }: MainPageProps) {
                 <SidebarTrigger className="-ml-1 hover:bg-accent hover:text-accent-foreground transition-colors relative z-50" />
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <p>切换侧边栏 (⌘B / Ctrl+B)</p>
+                <p>{t('actions.toggleSidebar')}</p>
               </TooltipContent>
             </Tooltip>
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-xl font-semibold">
-              {navItems.find(item => pathname.startsWith(item.href) && item.href !== '/' || pathname === item.href)?.title || '首页'}  
+              {navItems.find(item => pathname.startsWith(item.href) && item.href !== '/' || pathname === item.href)?.title || t('nav.home')}  
             </h1>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <LocaleSwitcher />
               <ThemeToggle />
             </div>
           </header>
