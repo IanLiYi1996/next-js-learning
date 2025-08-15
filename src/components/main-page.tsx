@@ -4,6 +4,7 @@ import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Bot, Settings, User, LogOut, BookOpen } from 'lucide-react';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { handleSignOut } from '@/lib/actions';
 import Chat from '@/components/chat';
 import {
@@ -182,11 +183,9 @@ export default function MainPage({ session, children }: MainPageProps) {
             <h1 className="text-xl font-semibold">
               {navItems.find(item => pathname.startsWith(item.href) && item.href !== '/' || pathname === item.href)?.title || '首页'}  
             </h1>
-            {/* <div className="ml-auto">
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                快捷键: ⌘B / Ctrl+B
-              </span>
-            </div> */}
+            <div className="ml-auto">
+              <ThemeToggle />
+            </div>
           </header>
           
           <div className="flex-1 overflow-auto">
