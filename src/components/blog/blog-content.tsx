@@ -2,10 +2,12 @@
 
 import React from 'react';
 import PostCard from '@/components/blog/post-card';
+import BlogDisplayCards from '@/components/blog/blog-display-cards';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import ClientTranslationProvider from '@/components/client-translation-provider';
 import { Post } from '@/lib/blog-data';
+import Link from 'next/link';
 
 interface BlogContentProps {
   posts: Post[];
@@ -22,11 +24,21 @@ export default function BlogContent({
   category, 
   tag 
 }: BlogContentProps) {
+  // Check if we're on the main blog page (no filters)
+  const isMainBlogPage = !category && !tag;
+  
   return (
     <ClientTranslationProvider 
       render={(t) => (
         <>
           <h1 className="text-3xl font-bold mb-8">{t('blog.title')}</h1>
+          
+          {/* Display featured section only on the main blog page */}
+          {isMainBlogPage && posts.length >= 3 && (
+            <div className="mb-16">
+              <BlogDisplayCards posts={posts} />
+            </div>
+          )}
           
           {/* 分类和标签过滤 */}
           <div className="mb-8">
@@ -37,43 +49,43 @@ export default function BlogContent({
               </TabsList>
               <TabsContent value="categories" className="mt-4">
                 <div className="flex flex-wrap gap-2">
-                  <a 
+                  <Link 
                     href="/blog"
                     className={`inline-flex items-center rounded-md px-3 py-1 text-sm 
                       ${!category ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                   >
                     {t('blog.all')}
-                  </a>
+                  </Link>
                   {categories.map((cat) => (
-                    <a 
+                    <Link 
                       key={cat} 
                       href={`/blog?category=${encodeURIComponent(cat)}`}
                       className={`inline-flex items-center rounded-md px-3 py-1 text-sm 
                         ${category === cat ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                     >
                       {cat}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </TabsContent>
               <TabsContent value="tags" className="mt-4">
                 <div className="flex flex-wrap gap-2">
-                  <a 
+                  <Link 
                     href="/blog"
                     className={`inline-flex items-center rounded-md px-3 py-1 text-sm 
                       ${!tag ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                   >
                     {t('blog.all')}
-                  </a>
+                  </Link>
                   {tags.map((tagItem) => (
-                    <a 
+                    <Link 
                       key={tagItem} 
                       href={`/blog?tag=${encodeURIComponent(tagItem)}`}
                       className={`inline-flex items-center rounded-md px-3 py-1 text-sm 
                         ${tag === tagItem ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
                     >
                       {tagItem}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </TabsContent>
@@ -87,22 +99,22 @@ export default function BlogContent({
               {category && (
                 <Badge variant="secondary" className="gap-1">
                   {t('blog.category')}: {category}
-                  <a href="/blog" className="ml-1 hover:text-primary">×</a>
+                  <Link href="/blog" className="ml-1 hover:text-primary">×</Link>
                 </Badge>
               )}
               {tag && (
                 <Badge variant="secondary" className="gap-1">
                   {t('blog.tag')}: {tag}
-                  <a href="/blog" className="ml-1 hover:text-primary">×</a>
+                  <Link href="/blog" className="ml-1 hover:text-primary">×</Link>
                 </Badge>
               )}
             </div>
           )}
           
-          {/* 文章列表 */}
+          {/* 文章列表 - Skip the first 3 posts on main page since they're in the featured section */}
           {posts.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((post) => (
+              {(isMainBlogPage ? posts.slice(3) : posts).map((post) => (
                 <PostCard
                   key={post.slug}
                   slug={post.slug}
