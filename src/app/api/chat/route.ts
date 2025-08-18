@@ -22,7 +22,7 @@ function createMockStream(response: string) {
 }
 
 // 模拟回复生成函数
-function generateMockResponse(messages: any[]) {
+function generateMockResponse(messages: Array<{ content: string }>) {
   const lastMessage = messages[messages.length - 1];
   const userMessage = lastMessage?.content || '';
   
@@ -50,9 +50,15 @@ function generateMockResponse(messages: any[]) {
   return `这是一个模拟的AI响应，因为系统中没有配置有效的OpenAI API密钥。您的问题是："${userMessage}"。要获得真实的AI回复，请配置有效的API密钥。我可以帮助回答问题、分析图片和文档，但目前我只能提供这个预设的回复。如有任何疑问，请随时提问！`;
 }
 
+interface ChatRequest {
+  messages: Array<{ content: string }>;
+  experimental_attachments?: FileList;
+  apiKey?: string;
+}
+
 export async function POST(req: Request) {
   // Extract the messages and other data from the request
-  const { messages, experimental_attachments, apiKey } = await req.json();
+  const { messages, apiKey } = await req.json() as ChatRequest;
 
   try {
     // 如果提供了API密钥，尝试使用真实API

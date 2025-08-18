@@ -1,16 +1,21 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
-import type { Message } from 'ai';
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, Trash, Copy, Paperclip, Image as ImageIcon, X } from 'lucide-react';
+import { Trash, Copy, RefreshCcw, Image as ImageIcon } from 'lucide-react';
 import { PromptBox } from '@/components/ui/chatgpt-prompt-input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { ChatBubble, ChatBubbleMessage, ChatBubbleAvatar, ChatBubbleActionWrapper } from '@/components/ui/chat-bubble';
+
+interface ChatMessage {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+}
 
 export default function Chat() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -19,10 +24,9 @@ export default function Chat() {
   
   const [files, setFiles] = useState<FileList | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 创建一个简单的自定义提交处理函数
-  const [chatMessages, setChatMessages] = useState<Array<{id: string, content: string, role: 'user' | 'assistant'}>>([
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
@@ -34,7 +38,7 @@ export default function Chat() {
   const [chatError, setChatError] = useState<Error | null>(null);
   
   // 模拟API调用
-  const handleCustomSubmit = async (e: React.FormEvent, options: any = {}) => {
+  const handleCustomSubmit = async (e: React.FormEvent, options: Record<string, unknown> = {}) => {
     e.preventDefault();
     
     if (!chatInput.trim() && !files?.length) return;
@@ -42,10 +46,10 @@ export default function Chat() {
     try {
       // 添加用户消息到聊天
       const userMessageId = Date.now().toString();
-      const userMessage = {
+      const userMessage: ChatMessage = {
         id: userMessageId,
         content: chatInput,
-        role: 'user' as const
+        role: 'user'
       };
       
       setChatMessages(prev => [...prev, userMessage]);
@@ -110,6 +114,13 @@ export default function Chat() {
       setTimeout(() => setCopied(null), 2000);
     });
   };
+
+  // 重新生成消息
+  const regenerateMessage = () => {
+    // 实际应用中，这里应该实现重新生成逻辑
+    alert('重新生成消息功能将在未来实现');
+  };
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Auto-scroll to bottom when messages change
@@ -202,9 +213,9 @@ export default function Chat() {
         )}
       </AnimatePresence>
       
-      {/* Messages display area */}
+      {/* Messages display area - Updated with ChatBubble components */}
       <div 
-        className="flex-1 overflow-y-auto p-3 space-y-3"
+        className="flex-1 overflow-y-auto p-3 space-y-6"
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -237,66 +248,69 @@ export default function Chat() {
             <p>开始与AI助手对话吧！</p>
           </div>
         ) : (
-          messages.map((message: any) => {
+          messages.map((message) => {
             const isUser = message.role === 'user';
+            const variant = isUser ? "sent" : "received";
+            
             return (
-              <div
-                key={message.id}
-                className={cn(
-                  'flex',
-                  isUser ? 'justify-end' : 'justify-start'
-                )}
-              >
-                <div
-                  className={cn(
-                    'rounded-lg px-3 py-2 max-w-[85%] break-words relative group',
-                    isUser 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted/80'
-                  )}
-                >
-                  {!isUser && (
-                    <button
-                      onClick={() => copyToClipboard(message.content, message.id)}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+              <ChatBubble key={message.id} variant={variant}>
+                <ChatBubbleAvatar 
+                  fallback={isUser ? "U" : "AI"} 
+                />
+                <div className="flex flex-col">
+                  <ChatBubbleMessage variant={variant} isLoading={isProcessing && message.id === messages[messages.length - 1].id}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
+                      components={{
+                        div: ({ className, children, ...props }) => (
+                          <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
+                            {children}
+                          </div>
+                        ),
+                        code: ({ inline, className, children, ...props }) => (
+                          <code className={cn(
+                            className,
+                            inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
+                          )} {...props}>
+                            {children}
+                          </code>
+                        )
+                      }}
                     >
-                      {copied === message.id ? (
-                        <span className="text-xs text-green-600">已复制!</span>
-                      ) : (
-                        <Copy size={14} className={isUser ? "text-primary-foreground/70" : "text-foreground/70"} />
-                      )}
-                    </button>
+                      {message.content}
+                    </ReactMarkdown>
+                  </ChatBubbleMessage>
+                  
+                  {!isUser && !isProcessing && (
+                    <ChatBubbleActionWrapper>
+                      <button
+                        onClick={() => copyToClipboard(message.content, message.id)}
+                        className="p-1 hover:bg-muted rounded-md transition-colors"
+                      >
+                        {copied === message.id ? (
+                          <span className="text-xs text-green-600 px-1">已复制!</span>
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
+                      <button
+                        onClick={regenerateMessage}
+                        className="p-1 hover:bg-muted rounded-md transition-colors"
+                      >
+                        <RefreshCcw size={14} />
+                      </button>
+                    </ChatBubbleActionWrapper>
                   )}
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeHighlight]}
-                    components={{
-                      div: ({ node, className, children, ...props }) => (
-                        <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
-                          {children}
-                        </div>
-                      ),
-                      code: ({ node, inline, className, children, ...props }) => (
-                        <code className={cn(
-                          className,
-                          inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
-                        )} {...props}>
-                          {children}
-                        </code>
-                      )
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
                 </div>
-              </div>
+              </ChatBubble>
             );
           })
         )}
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Input area with new PromptBox */}
+      {/* Input area with PromptBox */}
       <div className="border-t p-3">
         <PromptBox 
           value={input} 
@@ -328,20 +342,20 @@ export default function Chat() {
               setFiles(null);
             }
           }}
-          onSubmitMessage={(message, imageData) => {
+          onSubmitMessage={(submittedMessage) => {
             // 创建自定义表单提交事件
             const syntheticEvent = { 
               preventDefault: () => {}, 
               currentTarget: document.createElement('form') 
             } as React.FormEvent<HTMLFormElement>;
             
-            const options: any = files ? { experimental_attachments: files } : {};
+            const customOptions: Record<string, unknown> = files ? { experimental_attachments: files } : {};
             
             if (apiKey) {
-              options.apiKey = apiKey;
+              customOptions.apiKey = apiKey;
             }
             
-            handleSubmit(syntheticEvent, options);
+            handleSubmit(syntheticEvent, customOptions);
             setFiles(null);
           }}
         />
