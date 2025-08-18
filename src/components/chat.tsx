@@ -25,7 +25,7 @@ export default function Chat() {
   const awsSecretAccessKey = '';
   const awsRegion = 'us-east-1';
   const provider = 'bedrock' as const;
-  const bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0';
+  const [bedrockModel, setBedrockModel] = useState<string>('anthropic.claude-opus-4-1-20250805-v1:0');
   
   const [files, setFiles] = useState<FileList | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -348,6 +348,8 @@ export default function Chat() {
           disabled={isLoading}
           name="message"
           className={isInitialState ? "shadow-lg transition-shadow duration-300 hover:shadow-xl" : ""}
+          selectedModel={bedrockModel}
+          onModelSelect={setBedrockModel}
           onPaste={(e) => {
             const items = e.clipboardData?.items;
             if (items) {
