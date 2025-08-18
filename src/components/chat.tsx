@@ -5,6 +5,7 @@ import type { Message } from 'ai';
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send, Loader2, Trash, Copy, Paperclip, Image as ImageIcon, X } from 'lucide-react';
+import { PromptBox } from '@/components/ui/chatgpt-prompt-input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -295,148 +296,56 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Input area */}
-      <form 
-        onSubmit={(e) => {
-          e.preventDefault(); // 阻止表单默认提交行为
-          const options: any = files ? { experimental_attachments: files } : {};
-          
-          // 如果用户输入了API密钥，添加到请求选项中
-          if (apiKey) {
-            options.apiKey = apiKey;
-          }
-          
-          handleSubmit(e, options);
-          setFiles(null);
-        }} 
-        className="border-t p-3 flex flex-col gap-2"
-      >
-        <div className="flex w-full items-end gap-2">
-          <div className="flex-1 relative">
-            <textarea
-              className="resize-none w-full border rounded-md p-2 pr-10 focus:outline-none focus:ring-1 focus:ring-primary h-[60px] text-sm"
-              value={input}
-              onChange={handleInputChange}
-              placeholder="输入您的问题..."
-              rows={2}
-              disabled={isLoading}
-              onPaste={(e) => {
-                const items = e.clipboardData?.items;
-                if (items) {
-                  const clipboardFiles = Array.from(items)
-                    .filter(item => item.kind === 'file')
-                    .map(item => item.getAsFile())
-                    .filter((file): file is File => file !== null);
-                    
-                  if (clipboardFiles.length > 0) {
-                    const dataTransfer = new DataTransfer();
-                    clipboardFiles.forEach(file => dataTransfer.items.add(file));
-                    setFiles(dataTransfer.files);
-                  }
-                }
-              }}
-            />
-          </div>
-          
-          <input
-            type="file"
-            id="file-upload"
-            onChange={(e) => setFiles(e.target.files)}
-            className="hidden"
-            multiple
-            accept="image/*,text/*"
-            ref={fileInputRef}
-          />
-          
-          <Button 
-            type="button" 
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="h-[60px] w-[60px] rounded-md flex-shrink-0"
-            disabled={isLoading}
-          >
-            <Paperclip className="h-5 w-5" />
-          </Button>
-          
-          <Button 
-            type="submit" 
-            disabled={isLoading}
-            className="h-[60px] w-[60px] rounded-md flex-shrink-0"
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
-        
-        <AnimatePresence>
-          {files && files.length > 0 && (
-            <motion.div 
-              className="flex flex-wrap gap-2"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-            >
-              {Array.from(files).map((file, index) => (
-                <motion.div
-                  key={`${file.name}-${index}`}
-                  className="relative group"
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                >
-                  {file.type.startsWith('image/') ? (
-                    <div className="relative h-16 w-16 rounded-md overflow-hidden border border-border">
-                      <img 
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
-                        className="h-full w-full object-cover"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-0 right-0 h-4 w-4 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => {
-                          const dt = new DataTransfer();
-                          Array.from(files).forEach((f, i) => {
-                            if (i !== index) dt.items.add(f);
-                          });
-                          setFiles(dt.files.length > 0 ? dt.files : null);
-                        }}
-                      >
-                        <X className="h-2 w-2" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="relative h-16 w-24 p-1 text-[10px] leading-tight overflow-hidden rounded-md border border-border bg-muted/50">
-                      <div className="font-medium truncate">{file.name}</div>
-                      <div className="text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-0 right-0 h-4 w-4 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => {
-                          const dt = new DataTransfer();
-                          Array.from(files).forEach((f, i) => {
-                            if (i !== index) dt.items.add(f);
-                          });
-                          setFiles(dt.files.length > 0 ? dt.files : null);
-                        }}
-                      >
-                        <X className="h-2 w-2" />
-                      </Button>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </form>
+      {/* Input area with new PromptBox */}
+      <div className="border-t p-3">
+        <PromptBox 
+          value={input} 
+          onChange={handleInputChange} 
+          placeholder="输入您的问题..."
+          disabled={isLoading}
+          name="message"
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (items) {
+              const clipboardFiles = Array.from(items)
+                .filter(item => item.kind === 'file')
+                .map(item => item.getAsFile())
+                .filter((file): file is File => file !== null);
+                
+              if (clipboardFiles.length > 0) {
+                const dataTransfer = new DataTransfer();
+                clipboardFiles.forEach(file => dataTransfer.items.add(file));
+                setFiles(dataTransfer.files);
+              }
+            }
+          }}
+          onFileSelect={(file) => {
+            if (file) {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              setFiles(dataTransfer.files);
+            } else {
+              setFiles(null);
+            }
+          }}
+          onSubmitMessage={(message, imageData) => {
+            // 创建自定义表单提交事件
+            const syntheticEvent = { 
+              preventDefault: () => {}, 
+              currentTarget: document.createElement('form') 
+            } as React.FormEvent<HTMLFormElement>;
+            
+            const options: any = files ? { experimental_attachments: files } : {};
+            
+            if (apiKey) {
+              options.apiKey = apiKey;
+            }
+            
+            handleSubmit(syntheticEvent, options);
+            setFiles(null);
+          }}
+        />
+      </div>
     </div>
   );
 }
