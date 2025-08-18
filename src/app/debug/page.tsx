@@ -12,6 +12,8 @@ export default function DebugDisplayCards() {
   useEffect(() => {
     setMounted(true);
     console.log('Debug page loaded with posts:', posts);
+    console.log('Categories:', getAllCategories());
+    console.log('Tags:', getAllTags());
   }, [posts]);
 
   return (

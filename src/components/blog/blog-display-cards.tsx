@@ -100,6 +100,22 @@ interface BlogDisplayCardsProps {
 export default function BlogDisplayCards({ posts, className }: BlogDisplayCardsProps) {
   const [mounted, setMounted] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [supportsSkew, setSupportsSkew] = useState(true);
+  
+  // Check if the browser supports the CSS features we're using
+  useEffect(() => {
+    // Basic detection for modern CSS features support
+    try {
+      const testEl = document.createElement('div');
+      testEl.style.transform = 'skew(8deg)';
+      const hasTransformSupport = testEl.style.transform === 'skew(8deg)';
+      setSupportsSkew(hasTransformSupport);
+      console.log('CSS skew transform support:', hasTransformSupport);
+    } catch (e) {
+      console.warn('Error checking CSS support:', e);
+      setSupportsSkew(false);
+    }
+  }, []);
 
   // Ensure we have 3 posts by combining real posts with placeholders if needed
   const ensureThreePosts = () => {
@@ -117,12 +133,6 @@ export default function BlogDisplayCards({ posts, className }: BlogDisplayCardsP
 
   // Get 3 posts to display
   const displayPosts = ensureThreePosts();
-
-  // Move useEffect after all other hooks and before any conditional logic
-  useEffect(() => {
-    setMounted(true);
-    console.log("BlogDisplayCards mounted with", posts.length, "posts");
-  }, [posts.length]);
 
   // Generate cards configuration from posts
   const cards = displayPosts.map((post, index) => {
@@ -155,6 +165,23 @@ export default function BlogDisplayCards({ posts, className }: BlogDisplayCardsP
       isPlaceholder: post.slug.startsWith("placeholder-"),
     };
   });
+
+  // Use useEffect after all hooks and variables are defined
+  // NOTE: This was previously defined before 'cards' which could cause hook order issues
+  useEffect(() => {
+    setMounted(true);
+    console.log("BlogDisplayCards mounted with", posts.length, "posts");
+    console.log("Display posts prepared:", displayPosts);
+    console.log("Cards configuration:", cards);
+    
+    // Log card styling information for debugging
+    displayPosts.forEach((post, index) => {
+      console.log(`Card ${index} styling:`, 
+        index === 0 ? "First card (back)" : 
+        index === 1 ? "Middle card" : "Front card"
+      );
+    });
+  }, [posts.length, displayPosts]);
 
   // Prepare the loading state component for SSR
   const loadingComponent = (
@@ -208,7 +235,7 @@ export default function BlogDisplayCards({ posts, className }: BlogDisplayCardsP
                 icon={getCategoryIcon(post.frontmatter.category)}
                 iconClassName={icon}
                 titleClassName={title}
-                className="w-full skew-y-0 hover:scale-105 transition-transform"
+                className={`w-full ${supportsSkew ? 'skew-y-0 hover:scale-105' : ''} transition-transform`}
               />
             </Link>
           );
