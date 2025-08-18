@@ -3,7 +3,7 @@
 import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Bot, Settings, User, LogOut, BookOpen } from 'lucide-react';
+import { Home, Bot, Settings, User, LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LocaleSwitcher } from '@/components/locale-switcher';
 import { useTranslations } from '@/hooks/use-translations';
@@ -44,6 +44,11 @@ const getNavItems = (t: (key: string) => string) => [
     title: t('nav.home'),
     href: '/',
     icon: Home,
+  },
+  {
+    title: t('nav.dashboard'),
+    href: '/dashboard',
+    icon: LayoutDashboard,
   },
   {
     title: t('nav.blog'),
