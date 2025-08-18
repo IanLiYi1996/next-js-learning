@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, RefreshCcw, Image as ImageIcon } from 'lucide-react';
+import { Trash, Copy, RefreshCcw, Image as ImageIcon, FileText, BrainCircuit, ChevronDown, ChevronUp } from 'lucide-react';
 import { PromptBox } from '@/components/ui/chatgpt-prompt-input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,15 @@ interface ChatMessage {
   id: string;
   content: string;
   role: 'user' | 'assistant';
+  // Add reasoning and reasoningDetails fields
+  reasoning?: string;
+  reasoningDetails?: Record<string, any>;
+  // File attachments
+  attachments?: Array<{
+    type: 'file' | 'image';
+    data: string;
+    mediaType: string;
+  }>;
 }
 
 export default function Chat() {
@@ -26,6 +35,10 @@ export default function Chat() {
   const awsRegion = 'us-east-1';
   const provider = 'bedrock' as const;
   const [bedrockModel, setBedrockModel] = useState<string>('anthropic.claude-opus-4-1-20250805-v1:0');
+  // Enable reasoning for compatible Claude models
+  const [enableReasoning, setEnableReasoning] = useState<boolean>(false);
+  // Toggle to show reasoning details
+  const [showReasoning, setShowReasoning] = useState<boolean>(false);
   
   const [files, setFiles] = useState<FileList | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -51,19 +64,91 @@ export default function Chat() {
         role: 'user'
       };
       
+      // 处理文件附件
+      if (files?.length) {
+        const attachments = [];
+        
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const fileReader = new FileReader();
+          
+          await new Promise<void>((resolve) => {
+            fileReader.onloadend = () => {
+              const result = fileReader.result as string;
+              const base64Data = result.split(',')[1];
+              
+              attachments.push({
+                type: file.type.startsWith('image/') ? 'image' : 'file',
+                data: base64Data,
+                mediaType: file.type
+              });
+              
+              resolve();
+            };
+            
+            fileReader.readAsDataURL(file);
+          });
+        }
+        
+        // 添加附件到用户消息
+        userMessage.attachments = attachments;
+      }
+      
       setChatMessages(prev => [...prev, userMessage]);
       setChatInput('');
       setIsProcessing(true);
       
+      // 处理文件上传，转换为适当的消息格式
+      let formattedUserMessage = userMessage;
+      
+      // 如果有文件上传，将消息转换为多类型格式
+      if (files?.length) {
+        const fileAttachments: Array<{type: 'file' | 'image', data: string, mediaType: string}> = [];
+        
+        // 读取并处理文件
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          // 读取文件内容
+          const fileReader = new FileReader();
+          const fileContentPromise = new Promise<string>((resolve) => {
+            fileReader.onloadend = () => {
+              const result = fileReader.result as string;
+              // 移除 data URL 前缀
+              const base64Data = result.split(',')[1];
+              resolve(base64Data);
+            };
+          });
+          
+          fileReader.readAsDataURL(file);
+          const fileData = await fileContentPromise;
+          
+          // 确定文件类型
+          const fileType = file.type.startsWith('image/') ? 'image' : 'file';
+          
+          fileAttachments.push({
+            type: fileType,
+            data: fileData,
+            mediaType: file.type
+          });
+        }
+        
+        // 更新用户消息，添加文件附件
+        formattedUserMessage = {
+          ...userMessage,
+          attachments: fileAttachments
+        };
+      }
+      
       // 创建请求体
       const requestBody = {
-        messages: [...chatMessages, userMessage],
+        messages: [...chatMessages, formattedUserMessage],
         apiKey,
         awsAccessKeyId,
         awsSecretAccessKey,
         awsRegion,
         provider,
         bedrockModel,
+        enableReasoning: enableReasoning && bedrockModel.includes('claude-3-7-sonnet'),
         experimental_attachments: files || undefined
       };
       
@@ -80,18 +165,38 @@ export default function Chat() {
         throw new Error('API请求失败');
       }
       
-      // 读取响应
-      const responseText = await response.text();
+      // 检查响应类型
+      const contentType = response.headers.get('Content-Type') || '';
       
-      // 添加助手回复
-      setChatMessages(prev => [
-        ...prev, 
-        {
-          id: `response-${userMessageId}`,
-          content: responseText,
-          role: 'assistant'
-        }
-      ]);
+      if (contentType.includes('application/json')) {
+        // 处理 JSON 响应（包含推理结果）
+        const responseData = await response.json();
+        
+        // 添加助手回复，包含推理内容
+        setChatMessages(prev => [
+          ...prev, 
+          {
+            id: `response-${userMessageId}`,
+            content: responseData.text,
+            role: 'assistant',
+            reasoning: responseData.reasoning,
+            reasoningDetails: responseData.reasoningDetails
+          }
+        ]);
+      } else {
+        // 处理普通文本响应
+        const responseText = await response.text();
+        
+        // 添加助手回复
+        setChatMessages(prev => [
+          ...prev, 
+          {
+            id: `response-${userMessageId}`,
+            content: responseText,
+            role: 'assistant'
+          }
+        ]);
+      }
       
     } catch (error) {
       console.error('聊天错误:', error);
@@ -160,8 +265,24 @@ export default function Chat() {
       )}
       
       {!isInitialState && (
-        /* 工具栏 - 只显示清除对话按钮 */
-        <div className="flex justify-end px-4 py-2">
+        /* 工具栏 - 显示工具按钮和设置 */
+        <div className="flex justify-between px-4 py-2">
+          <div className="flex items-center space-x-2">
+            {/* 仅对 Claude 3.7 Sonnet 模型启用推理开关 */}
+            {bedrockModel.includes('claude-3-7-sonnet') && (
+              <Button
+                variant={enableReasoning ? "default" : "outline"}
+                size="sm"
+                onClick={() => setEnableReasoning(!enableReasoning)}
+                className="h-8 text-xs"
+                disabled={isLoading}
+              >
+                <BrainCircuit size={14} className="mr-1" /> 
+                {enableReasoning ? '推理已启用' : '启用推理'}
+              </Button>
+            )}
+          </div>
+          
           <Button
             variant="ghost"
             size="sm"
@@ -272,30 +393,143 @@ export default function Chat() {
                   fallback={isUser ? "U" : "AI"} 
                 />
                 <div className="flex flex-col">
-                  <ChatBubbleMessage variant={variant} isLoading={isProcessing && message.id === messages[messages.length - 1].id}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight]}
-                      components={{
-                        div: ({ className, children, ...props }) => (
-                          <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
-                            {children}
+                  <div>
+                    {/* 如果有附件，则显示附件内容 */}
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="mb-3 space-y-2">
+                        {message.attachments.map((attachment, i) => (
+                          <div key={i} className="flex flex-col">
+                            {attachment.type === 'image' ? (
+                              <div className="rounded-md overflow-hidden">
+                                <img 
+                                  src={`data:${attachment.mediaType};base64,${attachment.data}`} 
+                                  alt={`图片 ${i + 1}`}
+                                  className="max-w-full max-h-[300px] object-contain" 
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-center bg-muted rounded px-2 py-1 text-xs">
+                                <FileText size={12} className="mr-1" />
+                                <span>文件 {i + 1}</span>
+                              </div>
+                            )}
                           </div>
-                        ),
-                        code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => (
-                          <code className={cn(
-                            className,
-                            // 使用明确定义的类型来解决inline属性的类型错误
-                            props.inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
-                          )} {...props}>
-                            {children}
-                          </code>
-                        )
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </ChatBubbleMessage>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <ChatBubbleMessage variant={variant} isLoading={isProcessing && message.id === messages[messages.length - 1].id}>
+                      {/* 尝试检测图片标签并渲染图像 */}
+                      {typeof message.content === 'string' && message.content.includes('![') ? (
+                        <div className="prose prose-sm max-w-none text-sm">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={{
+                              div: ({ className, children, ...props }) => (
+                                <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
+                                  {children}
+                                </div>
+                              ),
+                              code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => (
+                                <code className={cn(
+                                  className,
+                                  // 使用明确定义的类型来解决inline属性的类型错误
+                                  props.inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
+                                )} {...props}>
+                                  {children}
+                                </code>
+                              ),
+                              img: ({ src, alt, ...props }) => {
+                                // 处理图像，如果是 Base64 数据 URL
+                                return (
+                                  <div className="my-2 max-w-full">
+                                    <img 
+                                      src={src} 
+                                      alt={alt || '图像'} 
+                                      className="max-w-full max-h-[300px] object-contain rounded-md" 
+                                      {...props} 
+                                    />
+                                  </div>
+                                );
+                              }
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeHighlight]}
+                          components={{
+                            div: ({ className, children, ...props }) => (
+                              <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
+                                {children}
+                              </div>
+                            ),
+                            code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => (
+                              <code className={cn(
+                                className,
+                                // 使用明确定义的类型来解决inline属性的类型错误
+                                props.inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
+                              )} {...props}>
+                                {children}
+                              </code>
+                            ),
+                            img: ({ src, alt, ...props }) => (
+                              <div className="my-2 max-w-full">
+                                <img 
+                                  src={src} 
+                                  alt={alt || '图像'} 
+                                  className="max-w-full max-h-[300px] object-contain rounded-md" 
+                                  {...props} 
+                                />
+                              </div>
+                            )
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      )}
+                    </ChatBubbleMessage>
+                    
+                    {/* 如果是助手消息且有推理内容，显示推理切换按钮 */}
+                    {!isUser && message.reasoning && (
+                      <div className="mt-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setShowReasoning(!showReasoning)}
+                          className="w-full text-xs justify-between p-2 h-8 border border-dashed border-muted-foreground/30"
+                        >
+                          <div className="flex items-center">
+                            <BrainCircuit size={14} className="mr-1 text-muted-foreground" />
+                            <span className="text-muted-foreground font-medium">查看 AI 推理过程</span>
+                          </div>
+                          {showReasoning ? (
+                            <ChevronUp size={14} className="text-muted-foreground" />
+                          ) : (
+                            <ChevronDown size={14} className="text-muted-foreground" />
+                          )}
+                        </Button>
+                        
+                        {/* 推理内容显示区 */}
+                        {showReasoning && (
+                          <div className="mt-2 p-3 bg-muted/50 rounded-md border border-border">
+                            <div className="text-xs font-medium mb-2 text-muted-foreground">推理过程:</div>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeHighlight]}
+                              className="text-sm prose-sm max-w-none"
+                            >
+                              {message.reasoning}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   
                   {!isUser && !isProcessing && (
                     <ChatBubbleActionWrapper>

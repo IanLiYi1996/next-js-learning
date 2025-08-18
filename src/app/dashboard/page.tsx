@@ -2,6 +2,12 @@ import { auth } from '../(auth)/auth';
 import { redirect } from 'next/navigation';
 import MainPage from '@/components/main-page';
 import Dashboard from '@/components/ui/dashboard-with-collapsible-sidebar';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: '仪表盘',
+  description: '系统仪表盘和数据分析',
+};
 
 export default async function DashboardPage() {
   let session;

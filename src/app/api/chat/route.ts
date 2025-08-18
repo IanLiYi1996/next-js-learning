@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { bedrock, createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { streamText } from 'ai';
+import { streamText, generateText } from 'ai';
 
 export const runtime = 'edge';
 
@@ -52,8 +52,16 @@ function generateMockResponse(messages: Array<{ content: string }>) {
 }
 
 interface ChatRequest {
-  messages: Array<{ content: string }>;
-  experimental_attachments?: FileList;
+  messages: Array<{ 
+    content: string | Array<{
+      type: 'text' | 'file' | 'image';
+      text?: string;
+      data?: string;
+      mediaType?: string;
+    }>;
+    role: string; 
+  }>;
+  experimental_attachments?: any;
   apiKey?: string;
   // AWS credentials for Bedrock
   awsAccessKeyId?: string;
@@ -63,6 +71,8 @@ interface ChatRequest {
   provider?: 'openai' | 'bedrock';
   // Model selection for Bedrock
   bedrockModel?: string;
+  // Enable reasoning for Claude models
+  enableReasoning?: boolean;
 }
 
 export async function POST(req: Request) {
@@ -74,7 +84,9 @@ export async function POST(req: Request) {
     awsSecretAccessKey, 
     awsRegion,
     provider = 'bedrock',  // Default to Bedrock
-    bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0'
+    bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0',
+    enableReasoning = false,
+    experimental_attachments
   } = await req.json() as ChatRequest;
 
   try {
@@ -127,23 +139,99 @@ export async function POST(req: Request) {
           const bedrockInstance = createAmazonBedrock(bedrockConfig);
           
           // 处理消息格式，Claude需要以用户消息开始
-          // 过滤掉系统自动生成的问候消息
-          const filteredMessages = messages.filter((message, index) => {
-            // 如果是第一条助手消息且是问候消息，则跳过
-            if (index === 0 && message.role === 'assistant' && 
-                (message.content.includes('您好') || message.content.includes('有什么可以帮您'))) {
-              return false;
-            }
-            return true;
-          });
+          // 过滤掉系统自动生成的问候消息，并处理消息格式
+          const filteredMessages = messages
+            .filter((message, index) => {
+              // 如果是第一条助手消息且是问候消息，则跳过
+              if (index === 0 && message.role === 'assistant' && 
+                  (message.content.includes('您好') || message.content.includes('有什么可以帮您'))) {
+                return false;
+              }
+              return true;
+            })
+            .map(message => {
+              // 处理消息格式，支持多部分内容（文本、图像、文件）
+              if (typeof message.content === 'string') {
+                // 检查 AI 响应中是否有图片标记
+                if (message.role === 'assistant' && message.content.includes('![')) {
+                  // 保留原样，Markdown 图片将在前端渲染
+                }
+                return message;
+              }
+              
+              // 处理数组形式的内容，包含文本和文件
+              if (Array.isArray(message.content)) {
+                // 转换为 AI SDK 支持的格式
+                const formattedContent = message.content.map(item => {
+                  if (item.type === 'text') {
+                    return { type: 'text', text: item.text };
+                  } else if (item.type === 'image' || item.type === 'file') {
+                    return { 
+                      type: 'file', 
+                      data: Buffer.from(item.data || '', 'base64'),
+                      mediaType: item.mediaType || (item.type === 'image' ? 'image/jpeg' : 'application/octet-stream')
+                    };
+                  }
+                  return item;
+                });
+                
+                return { ...message, content: formattedContent };
+              }
+              
+              // 处理带有附件的消息
+              if (message.attachments && Array.isArray(message.attachments)) {
+                const textContent = typeof message.content === 'string' ? message.content : '';
+                
+                // 创建多部分内容数组
+                const formattedContent = [
+                  { type: 'text', text: textContent },
+                  ...message.attachments.map(attachment => ({
+                    type: 'file',
+                    data: Buffer.from(attachment.data || '', 'base64'),
+                    mediaType: attachment.mediaType || 'application/octet-stream'
+                  }))
+                ];
+                
+                return { ...message, content: formattedContent };
+              }
+              
+              return message;
+            });
           
-          textStream = await streamText({
-            model: bedrockInstance(bedrockModel),
-            messages: filteredMessages,
-            temperature: 0.7,
-            // 系统提示词
-            system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
-          });
+          // 如果启用了推理功能并且是支持推理的模型
+          if (enableReasoning && bedrockModel.includes('claude-3-7-sonnet')) {
+            // 使用 generateText 获取推理结果
+            const result = await generateText({
+              model: bedrockInstance(bedrockModel),
+              messages: filteredMessages,
+              temperature: 0.7,
+              providerOptions: {
+                bedrock: {
+                  reasoningConfig: { type: 'enabled', budgetTokens: 1024 }
+                }
+              },
+              system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
+            });
+            
+            // 返回完整的结果，包括推理过程
+            return new Response(
+              JSON.stringify({
+                text: result.text,
+                reasoning: result.reasoning,
+                reasoningDetails: result.reasoningDetails
+              }),
+              { headers: { 'Content-Type': 'application/json' } }
+            );
+          } else {
+            // 正常流式响应
+            textStream = await streamText({
+              model: bedrockInstance(bedrockModel),
+              messages: filteredMessages,
+              temperature: 0.7,
+              // 系统提示词
+              system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
+            });
+          }
         }
         
         return textStream.toTextStreamResponse();

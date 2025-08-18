@@ -5,6 +5,12 @@ import { getAllPosts, getAllCategories, getAllTags } from '@/lib/blog';
 import PostCard from '@/components/blog/post-card';
 import MainPage from '@/components/main-page';
 import BlogContent from '@/components/blog/blog-content';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: '博客文章',
+  description: '浏览所有博客文章',
+};
 
 // 该页面需要服务端渲染，因为我们需要获取认证信息
 export default async function BlogListPage({

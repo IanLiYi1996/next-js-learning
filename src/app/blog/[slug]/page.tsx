@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getPostBySlug, getPostSlugs, extractHeadings } from '@/lib/blog';
 import MainPage from '@/components/main-page';
 import BlogPostView from '@/components/blog/blog-post-view';
+import { Metadata } from 'next';
 
 // 生成静态路径参数
 export function generateStaticParams() {
@@ -11,6 +12,31 @@ export function generateStaticParams() {
   return slugs.map((slug) => ({
     slug,
   }));
+}
+
+// 生成动态元数据
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  // 获取文章数据
+  try {
+    const post = getPostBySlug(params.slug);
+    
+    return {
+      title: post.title,
+      description: post.description || `${post.title} - 博客文章`,
+      openGraph: {
+        title: post.title,
+        description: post.description,
+        type: 'article',
+        publishedTime: post.date,
+        authors: ['Next.js 学习'],
+        tags: post.tags,
+      },
+    };
+  } catch (error) {
+    return {
+      title: '文章未找到',
+    };
+  }
 }
 
 export default async function BlogPostPage({ 

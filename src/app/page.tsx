@@ -1,6 +1,11 @@
 import { auth } from './(auth)/auth';
 import { redirect } from 'next/navigation';
 import MainPage from '../components/main-page';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: '首页 | Next.js Learning',
+};
 
 export default async function HomePage() {
   let session;
