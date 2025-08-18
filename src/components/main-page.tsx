@@ -97,16 +97,6 @@ export default function MainPage({ session, children }: MainPageProps) {
                 </Tooltip>
                 <span className="font-semibold group-data-[collapsible=icon]:hidden">{t('nav.aiAssistant')}</span>
               </div>
-              <div className="group-data-[collapsible=icon]:hidden">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarTrigger className="hover:bg-accent hover:text-accent-foreground transition-colors" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>{t('actions.collapseSidebar')}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
             </div>
           </SidebarHeader>
           
@@ -120,6 +110,7 @@ export default function MainPage({ session, children }: MainPageProps) {
                         asChild
                         isActive={pathname === item.href}
                         tooltip={item.title}
+                        className="pl-4 group-data-[collapsible=icon]:!pl-4"
                       >
                         <Link href={item.href}>
                           <item.icon className="h-4 w-4" />
@@ -135,6 +126,32 @@ export default function MainPage({ session, children }: MainPageProps) {
 
           <SidebarFooter>
             <SidebarMenu>
+              {/* Theme toggle control */}
+              <SidebarMenuItem>
+                <div className="flex items-center justify-start gap-3 pl-4 pr-2 py-1.5 group-data-[collapsible=icon]:!pl-3">
+                  <div className="flex-shrink-0">
+                    <ThemeToggle />
+                  </div>
+                  <span className="text-sm font-medium group-data-[collapsible=icon]:hidden">
+                    {t('actions.changeTheme')}
+                  </span>
+                </div>
+              </SidebarMenuItem>
+              
+              {/* Language switcher control */}
+              <SidebarMenuItem>
+                <div className="flex items-center justify-start gap-3 pl-4 pr-2 py-1.5 group-data-[collapsible=icon]:!pl-3">
+                  <div className="flex-shrink-0">
+                    <LocaleSwitcher />
+                  </div>
+                  <span className="text-sm font-medium group-data-[collapsible=icon]:hidden">
+                    {t('actions.changeLanguage')}
+                  </span>
+                </div>
+              </SidebarMenuItem>
+              <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+                <Separator className="my-2" />
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <div className="flex items-center gap-3 px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
                   <Tooltip>
@@ -179,27 +196,8 @@ export default function MainPage({ session, children }: MainPageProps) {
         </Sidebar>
 
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4 bg-background relative z-40">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarTrigger className="-ml-1 hover:bg-accent hover:text-accent-foreground transition-colors relative z-50" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>{t('actions.toggleSidebar')}</p>
-              </TooltipContent>
-            </Tooltip>
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <h1 className="text-xl font-semibold">
-              {navItems.find(item => pathname.startsWith(item.href) && item.href !== '/' || pathname === item.href)?.title || t('nav.home')}  
-            </h1>
-            <div className="ml-auto flex items-center gap-2">
-              <LocaleSwitcher />
-              <ThemeToggle />
-            </div>
-          </header>
-          
-          <div className="flex-1 overflow-auto">
-            <div className="mx-auto h-full max-w-4xl">
+          <div className="flex-1 overflow-auto pt-4 px-4">
+            <div className="mx-auto h-full max-w-4xl pt-2">
               {children || (
                 <div className="h-full">
                   <Chat />

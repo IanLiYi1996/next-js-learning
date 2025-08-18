@@ -19,6 +19,8 @@ export type TranslationKeys = {
     logout: string;
     toggleSidebar: string;
     collapseSidebar: string;
+    changeTheme: string;
+    changeLanguage: string;
   };
   blog: {
     title: string;
@@ -139,7 +141,9 @@ export const translations: Record<Locale, TranslationKeys> = {
     actions: {
       logout: "退出登录",
       toggleSidebar: "切换侧边栏 (⌘B / Ctrl+B)",
-      collapseSidebar: "收起侧边栏 (⌘B / Ctrl+B)"
+      collapseSidebar: "收起侧边栏 (⌘B / Ctrl+B)",
+      changeTheme: "切换主题",
+      changeLanguage: "切换语言"
     },
     blog: {
       title: "博客",
@@ -258,7 +262,9 @@ export const translations: Record<Locale, TranslationKeys> = {
     actions: {
       logout: "Log Out",
       toggleSidebar: "Toggle Sidebar (⌘B / Ctrl+B)",
-      collapseSidebar: "Collapse Sidebar (⌘B / Ctrl+B)"
+      collapseSidebar: "Collapse Sidebar (⌘B / Ctrl+B)",
+      changeTheme: "Change Theme",
+      changeLanguage: "Change Language"
     },
     blog: {
       title: "Blog",

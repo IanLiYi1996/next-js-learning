@@ -259,32 +259,11 @@ const DashboardContent = () => {
   const { t } = useTranslations();
   
   return (
-    <div className="flex-1 bg-gray-50 dark:bg-gray-950 p-6 overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('dashboard.title')}</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">{t('dashboard.welcome')}</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="relative p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-          </button>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-          >
-            {theme === 'dark' ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-          </button>
-          <button className="p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
-            <User className="h-5 w-5" />
-          </button>
-        </div>
+    <div className="flex-1 bg-gray-50 dark:bg-gray-950 p-6 pt-8 overflow-auto">
+      {/* Dashboard Title */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('dashboard.title')}</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">{t('dashboard.welcome')}</p>
       </div>
       
       {/* Stats Grid */}
