@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, RefreshCcw, Image as ImageIcon, Settings } from 'lucide-react';
+import { Trash, Copy, RefreshCcw, Image as ImageIcon } from 'lucide-react';
 import { PromptBox } from '@/components/ui/chatgpt-prompt-input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -19,33 +19,25 @@ interface ChatMessage {
 
 export default function Chat() {
   const [copied, setCopied] = useState<string | null>(null);
-  // API credentials
-  const [apiKey, setApiKey] = useState<string>('');
-  const [awsAccessKeyId, setAwsAccessKeyId] = useState<string>('');
-  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState<string>('');
-  const [awsRegion, setAwsRegion] = useState<string>('us-east-1');
-  const [provider, setProvider] = useState<'openai' | 'bedrock'>('bedrock');
-  const [bedrockModel, setBedrockModel] = useState<string>('anthropic.claude-3-sonnet-20240229-v1:0');
-  
-  const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
+  // API credentials (read-only access - managed through environment variables)
+  const apiKey = '';
+  const awsAccessKeyId = '';
+  const awsSecretAccessKey = '';
+  const awsRegion = 'us-east-1';
+  const provider = 'bedrock' as const;
+  const bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0';
   
   const [files, setFiles] = useState<FileList | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
   // 创建一个简单的自定义提交处理函数
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: '您好！我是AI助手，有什么可以帮您的吗？'
-    }
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]); // 初始为空数组，没有欢迎消息
   const [isProcessing, setIsProcessing] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatError, setChatError] = useState<Error | null>(null);
   
   // 模拟API调用
-  const handleCustomSubmit = async (e: React.FormEvent, options: Record<string, unknown> = {}) => {
+  const handleCustomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!chatInput.trim() && !files?.length) return;
@@ -119,6 +111,9 @@ export default function Chat() {
   const setMessages = setChatMessages;
   const handleSubmit = handleCustomSubmit;
   
+  // 判断对话是否已经开始
+  const hasStartedConversation = messages.length > 0;
+  
   // 复制消息内容
   const copyToClipboard = (content: string, id: string) => {
     navigator.clipboard.writeText(content).then(() => {
@@ -142,9 +137,12 @@ export default function Chat() {
     }
   }, [messages]);
 
+  // 判断是否在初始形态（无消息）
+  const isInitialState = !hasStartedConversation;
+
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-9rem)]">
-      {/* 错误显示 */}
+    <div className="flex flex-col h-full max-h-[calc(100vh-9rem)] relative">  {/* 添加relative以便于居中定位 */}
+      {/* 错误显示 - 始终展示 */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mx-4 mt-4">
           <div className="flex">
@@ -161,130 +159,22 @@ export default function Chat() {
         </div>
       )}
       
-      {/* 工具栏 */}
-      <div className="flex justify-between px-4 py-1 border-b">
-        <div className="flex items-center">
+      {!isInitialState && (
+        /* 工具栏 - 只显示清除对话按钮 */
+        <div className="flex justify-end px-4 py-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-            className="h-8 text-xs flex items-center"
+            onClick={() => setMessages([])}
+            className="h-8 text-xs"
+            disabled={messages.length <= 1 || isLoading}
           >
-            <Settings size={14} className="mr-1" />
-            {showApiKeyInput ? '隐藏API设置' : '设置API'}
+            <Trash size={14} className="mr-1" /> 清除对话
           </Button>
-          
-          {showApiKeyInput && (
-            <div className="ml-2 flex flex-col gap-2 bg-muted/20 p-2 rounded-md">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium w-20">AI提供商:</label>
-                <select 
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value as 'openai' | 'bedrock')}
-                  className="border text-xs px-2 py-1 rounded w-32"
-                >
-                  <option value="bedrock">Amazon Bedrock</option>
-                  <option value="openai">OpenAI</option>
-                </select>
-              </div>
-
-              {provider === 'openai' ? (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium w-20">OpenAI密钥:</label>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="border text-xs px-2 py-1 rounded w-48"
-                  />
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 text-xs px-2" 
-                    onClick={() => setApiKey('')}
-                  >
-                    清除
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium w-20">模型:</label>
-                    <select
-                      value={bedrockModel}
-                      onChange={(e) => setBedrockModel(e.target.value)}
-                      className="border text-xs px-2 py-1 rounded w-full"
-                    >
-                      <option value="anthropic.claude-3-sonnet-20240229-v1:0">Claude 3 Sonnet</option>
-                      <option value="anthropic.claude-3-haiku-20240307-v1:0">Claude 3 Haiku</option>
-                      <option value="anthropic.claude-3-opus-20240229-v1:0">Claude 3 Opus</option>
-                      <option value="meta.llama3-70b-instruct-v1:0">Meta Llama 3 70B</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium w-20">Access Key ID:</label>
-                    <input
-                      type="password"
-                      value={awsAccessKeyId}
-                      onChange={(e) => setAwsAccessKeyId(e.target.value)}
-                      placeholder="AKIA..."
-                      className="border text-xs px-2 py-1 rounded w-48"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium w-20">Secret Access Key:</label>
-                    <input
-                      type="password"
-                      value={awsSecretAccessKey}
-                      onChange={(e) => setAwsSecretAccessKey(e.target.value)}
-                      placeholder="AWS密钥..."
-                      className="border text-xs px-2 py-1 rounded w-48"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium w-20">区域:</label>
-                    <select
-                      value={awsRegion}
-                      onChange={(e) => setAwsRegion(e.target.value)}
-                      className="border text-xs px-2 py-1 rounded w-48"
-                    >
-                      <option value="us-east-1">us-east-1</option>
-                      <option value="us-west-2">us-west-2</option>
-                      <option value="ap-northeast-1">ap-northeast-1 (东京)</option>
-                      <option value="eu-west-1">eu-west-1 (爱尔兰)</option>
-                    </select>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 text-xs px-2" 
-                      onClick={() => {
-                        setAwsAccessKeyId('');
-                        setAwsSecretAccessKey('');
-                        setAwsRegion('us-east-1');
-                      }}
-                    >
-                      清除
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
-        
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setMessages([])}
-          className="h-8 text-xs"
-          disabled={messages.length <= 1 || isLoading}
-        >
-          <Trash size={14} className="mr-1" /> 清除对话
-        </Button>
-      </div>
+      )}
       
-      {/* Drag overlay */}
+      {/* Drag overlay - 在两种模式下都生效 */}
       <AnimatePresence>
         {isDragging && (
           <motion.div
@@ -304,10 +194,43 @@ export default function Chat() {
         )}
       </AnimatePresence>
       
-      {/* Messages display area - Updated with ChatBubble components */}
-      <div 
-        className="flex-1 overflow-y-auto p-3 space-y-6"
-        onDragOver={(e) => {
+      {/* 使用AnimatePresence进行布局切换动画 */}
+      <AnimatePresence mode="wait">
+        {isInitialState ? (
+          // 初始界面 - 居中显示欢迎信息
+          <motion.div 
+            key="initial-state"
+            className="absolute inset-0 flex flex-col items-center justify-center p-6 z-10" // 绝对定位到容器中央
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            <motion.h1 
+              className="text-2xl sm:text-3xl font-bold text-center mb-2 sm:mb-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+            >
+              智能助手
+            </motion.h1>
+            <motion.p 
+              className="text-center text-muted-foreground mb-6 sm:mb-8 max-w-md px-4 text-sm sm:text-base"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+            >
+              有任何问题都可以向我提问，开始聊天吧！
+            </motion.p>
+          </motion.div>
+        ) : (
+          // 对话界面 - 显示消息历史
+          <motion.div 
+            key="chat-state"
+            className="flex-1 overflow-y-auto p-3 space-y-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
         }}
@@ -359,10 +282,11 @@ export default function Chat() {
                             {children}
                           </div>
                         ),
-                        code: ({ inline, className, children, ...props }) => (
+                        code: ({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => (
                           <code className={cn(
                             className,
-                            inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
+                            // 使用明确定义的类型来解决inline属性的类型错误
+                            props.inline ? 'px-1 py-0.5 rounded-sm bg-muted font-mono text-sm' : 'p-2 overflow-x-auto block'
                           )} {...props}>
                             {children}
                           </code>
@@ -398,17 +322,32 @@ export default function Chat() {
             );
           })
         )}
-        <div ref={messagesEndRef} />
-      </div>
+          <div ref={messagesEndRef} />
+          </motion.div>
+        )}
+      </AnimatePresence>
       
-      {/* Input area with PromptBox */}
-      <div className="border-t p-3">
+      {/* 输入区域 - 根据状态调整样式 */}
+      <motion.div 
+        className={cn(
+          "p-3", 
+          isInitialState ? "absolute left-1/2 top-1/2 transform -translate-x-1/2 translate-y-0 w-full max-w-2xl px-4 sm:px-6 z-20" : "border-t relative"
+        )}
+        initial={false}
+        animate={{
+          width: "100%",
+          maxWidth: isInitialState ? "42rem" : "100%",
+          y: isInitialState ? "15vh" : 0,  // 在初始状态下向下偏移，移动设备上偏移少一点
+        }}
+        transition={{ duration: 0.3 }}
+      >
         <PromptBox 
           value={input} 
           onChange={handleInputChange} 
-          placeholder="输入您的问题..."
+          placeholder={isInitialState ? "输入问题开始聊天..." : "输入您的问题..."}
           disabled={isLoading}
           name="message"
+          className={isInitialState ? "shadow-lg transition-shadow duration-300 hover:shadow-xl" : ""}
           onPaste={(e) => {
             const items = e.clipboardData?.items;
             if (items) {
@@ -433,7 +372,7 @@ export default function Chat() {
               setFiles(null);
             }
           }}
-          onSubmitMessage={(submittedMessage) => {
+          onSubmitMessage={() => {
             // 创建自定义表单提交事件
             const syntheticEvent = { 
               preventDefault: () => {}, 
@@ -442,25 +381,23 @@ export default function Chat() {
             
             const customOptions: Record<string, unknown> = files ? { experimental_attachments: files } : {};
             
-            // 添加API密钥
-            if (provider === 'openai' && apiKey) {
-              customOptions.apiKey = apiKey;
-            } else if (provider === 'bedrock') {
-              customOptions.provider = 'bedrock';
-              customOptions.bedrockModel = bedrockModel;
-              
-              if (awsAccessKeyId && awsSecretAccessKey) {
-                customOptions.awsAccessKeyId = awsAccessKeyId;
-                customOptions.awsSecretAccessKey = awsSecretAccessKey;
-                customOptions.awsRegion = awsRegion;
-              }
+            // 添加 Bedrock 配置
+            customOptions.provider = provider;
+            customOptions.bedrockModel = bedrockModel;
+            
+            // 如果有 AWS 凭据，则添加到请求中
+            if (awsAccessKeyId && awsSecretAccessKey) {
+              customOptions.awsAccessKeyId = awsAccessKeyId;
+              customOptions.awsSecretAccessKey = awsSecretAccessKey;
+              customOptions.awsRegion = awsRegion;
             }
             
-            handleSubmit(syntheticEvent, customOptions);
+            // The custom options are handled within the function now
+            handleSubmit(syntheticEvent);
             setFiles(null);
           }}
         />
-      </div>
+      </motion.div>
     </div>
   );
 }
