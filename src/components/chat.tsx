@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, RefreshCcw, Image as ImageIcon } from 'lucide-react';
+import { Trash, Copy, RefreshCcw, Image as ImageIcon, Settings } from 'lucide-react';
 import { PromptBox } from '@/components/ui/chatgpt-prompt-input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -19,7 +19,14 @@ interface ChatMessage {
 
 export default function Chat() {
   const [copied, setCopied] = useState<string | null>(null);
+  // API credentials
   const [apiKey, setApiKey] = useState<string>('');
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState<string>('');
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState<string>('');
+  const [awsRegion, setAwsRegion] = useState<string>('us-east-1');
+  const [provider, setProvider] = useState<'openai' | 'bedrock'>('bedrock');
+  const [bedrockModel, setBedrockModel] = useState<string>('anthropic.claude-3-sonnet-20240229-v1:0');
+  
   const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
   
   const [files, setFiles] = useState<FileList | null>(null);
@@ -60,6 +67,11 @@ export default function Chat() {
       const requestBody = {
         messages: [...chatMessages, userMessage],
         apiKey,
+        awsAccessKeyId,
+        awsSecretAccessKey,
+        awsRegion,
+        provider,
+        bedrockModel,
         experimental_attachments: files || undefined
       };
       
@@ -156,28 +168,107 @@ export default function Chat() {
             variant="ghost"
             size="sm"
             onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-            className="h-8 text-xs"
+            className="h-8 text-xs flex items-center"
           >
-            {showApiKeyInput ? '隐藏API密钥' : '设置API密钥'}
+            <Settings size={14} className="mr-1" />
+            {showApiKeyInput ? '隐藏API设置' : '设置API'}
           </Button>
           
           {showApiKeyInput && (
-            <div className="ml-2 flex items-center gap-2">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="输入OpenAI API密钥"
-                className="border text-xs px-2 py-1 rounded w-48"
-              />
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 text-xs px-2" 
-                onClick={() => setApiKey('')}
-              >
-                清除
-              </Button>
+            <div className="ml-2 flex flex-col gap-2 bg-muted/20 p-2 rounded-md">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium w-20">AI提供商:</label>
+                <select 
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as 'openai' | 'bedrock')}
+                  className="border text-xs px-2 py-1 rounded w-32"
+                >
+                  <option value="bedrock">Amazon Bedrock</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+
+              {provider === 'openai' ? (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-medium w-20">OpenAI密钥:</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="border text-xs px-2 py-1 rounded w-48"
+                  />
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 text-xs px-2" 
+                    onClick={() => setApiKey('')}
+                  >
+                    清除
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium w-20">模型:</label>
+                    <select
+                      value={bedrockModel}
+                      onChange={(e) => setBedrockModel(e.target.value)}
+                      className="border text-xs px-2 py-1 rounded w-full"
+                    >
+                      <option value="anthropic.claude-3-sonnet-20240229-v1:0">Claude 3 Sonnet</option>
+                      <option value="anthropic.claude-3-haiku-20240307-v1:0">Claude 3 Haiku</option>
+                      <option value="anthropic.claude-3-opus-20240229-v1:0">Claude 3 Opus</option>
+                      <option value="meta.llama3-70b-instruct-v1:0">Meta Llama 3 70B</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium w-20">Access Key ID:</label>
+                    <input
+                      type="password"
+                      value={awsAccessKeyId}
+                      onChange={(e) => setAwsAccessKeyId(e.target.value)}
+                      placeholder="AKIA..."
+                      className="border text-xs px-2 py-1 rounded w-48"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium w-20">Secret Access Key:</label>
+                    <input
+                      type="password"
+                      value={awsSecretAccessKey}
+                      onChange={(e) => setAwsSecretAccessKey(e.target.value)}
+                      placeholder="AWS密钥..."
+                      className="border text-xs px-2 py-1 rounded w-48"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium w-20">区域:</label>
+                    <select
+                      value={awsRegion}
+                      onChange={(e) => setAwsRegion(e.target.value)}
+                      className="border text-xs px-2 py-1 rounded w-48"
+                    >
+                      <option value="us-east-1">us-east-1</option>
+                      <option value="us-west-2">us-west-2</option>
+                      <option value="ap-northeast-1">ap-northeast-1 (东京)</option>
+                      <option value="eu-west-1">eu-west-1 (爱尔兰)</option>
+                    </select>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-xs px-2" 
+                      onClick={() => {
+                        setAwsAccessKeyId('');
+                        setAwsSecretAccessKey('');
+                        setAwsRegion('us-east-1');
+                      }}
+                    >
+                      清除
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -351,8 +442,18 @@ export default function Chat() {
             
             const customOptions: Record<string, unknown> = files ? { experimental_attachments: files } : {};
             
-            if (apiKey) {
+            // 添加API密钥
+            if (provider === 'openai' && apiKey) {
               customOptions.apiKey = apiKey;
+            } else if (provider === 'bedrock') {
+              customOptions.provider = 'bedrock';
+              customOptions.bedrockModel = bedrockModel;
+              
+              if (awsAccessKeyId && awsSecretAccessKey) {
+                customOptions.awsAccessKeyId = awsAccessKeyId;
+                customOptions.awsSecretAccessKey = awsSecretAccessKey;
+                customOptions.awsRegion = awsRegion;
+              }
             }
             
             handleSubmit(syntheticEvent, customOptions);

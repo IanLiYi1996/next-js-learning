@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { bedrock, createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { streamText } from 'ai';
 
 export const runtime = 'edge';
@@ -54,47 +55,111 @@ interface ChatRequest {
   messages: Array<{ content: string }>;
   experimental_attachments?: FileList;
   apiKey?: string;
+  // AWS credentials for Bedrock
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsRegion?: string;
+  // Provider selection
+  provider?: 'openai' | 'bedrock';
+  // Model selection for Bedrock
+  bedrockModel?: string;
 }
 
 export async function POST(req: Request) {
   // Extract the messages and other data from the request
-  const { messages, apiKey } = await req.json() as ChatRequest;
+  const { 
+    messages, 
+    apiKey, 
+    awsAccessKeyId, 
+    awsSecretAccessKey, 
+    awsRegion,
+    provider = 'bedrock',  // Default to Bedrock
+    bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0'
+  } = await req.json() as ChatRequest;
 
   try {
-    // 如果提供了API密钥，尝试使用真实API
-    if (apiKey) {
+    // 检查是否提供了有效的凭据
+    const hasOpenAICredentials = !!apiKey;
+    const hasAWSCredentials = !!(awsAccessKeyId && awsSecretAccessKey && awsRegion) || 
+                          !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.AWS_REGION);
+    
+    // 如果提供了凭据，尝试使用真实API
+    if ((provider === 'openai' && hasOpenAICredentials) || (provider === 'bedrock' && hasAWSCredentials)) {
       try {
-        // 使用用户提供的API密钥
-        process.env.OPENAI_API_KEY = apiKey;
-        
         // 创建流式文本响应
-        const textStream = await streamText({
-          model: openai('gpt-4o'), // 使用 gpt-4o 模型
-          messages,
-          temperature: 0.7,
-              // OpenAI特定配置
-          providerOptions: {
-            openai: {
-              // 用户标识符
-              user: 'chat-user',
+        let textStream;
+        
+        if (provider === 'openai' && apiKey) {
+          // 使用OpenAI
+          process.env.OPENAI_API_KEY = apiKey;
+          
+          textStream = await streamText({
+            model: openai('gpt-4o'), // 使用 gpt-4o 模型
+            messages,
+            temperature: 0.7,
+            // OpenAI特定配置
+            providerOptions: {
+              openai: {
+                // 用户标识符
+                user: 'chat-user',
+              },
             },
-          },
-          // 系统提示词
-          system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
-        });
+            // 系统提示词
+            system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
+          });
+        } else {
+          // 使用Amazon Bedrock
+          // 设置AWS凭据
+          const bedrockConfig: any = {};
+          
+          // 优先使用请求中的凭据
+          if (awsAccessKeyId && awsSecretAccessKey && awsRegion) {
+            bedrockConfig.accessKeyId = awsAccessKeyId;
+            bedrockConfig.secretAccessKey = awsSecretAccessKey;
+            bedrockConfig.region = awsRegion;
+          } else {
+            // Edge runtime无法使用某些AWS SDK凭据提供者
+            // 简化凭据处理，使用环境变量
+            bedrockConfig.region = process.env.AWS_REGION;
+          }
+          
+          // 创建 Bedrock 实例
+          const bedrockInstance = createAmazonBedrock(bedrockConfig);
+          
+          // 处理消息格式，Claude需要以用户消息开始
+          // 过滤掉系统自动生成的问候消息
+          const filteredMessages = messages.filter((message, index) => {
+            // 如果是第一条助手消息且是问候消息，则跳过
+            if (index === 0 && message.role === 'assistant' && 
+                (message.content.includes('您好') || message.content.includes('有什么可以帮您'))) {
+              return false;
+            }
+            return true;
+          });
+          
+          textStream = await streamText({
+            model: bedrockInstance(bedrockModel),
+            messages: filteredMessages,
+            temperature: 0.7,
+            // 系统提示词
+            system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
+          });
+        }
         
         return textStream.toTextStreamResponse();
       } catch (error) {
-        console.error('使用提供的API密钥时出错:', error);
-        // API密钥无效，回退到模拟响应
-        const mockResponse = `提供的API密钥似乎无效或发生了错误。这是一个模拟回复。错误详情: ${error instanceof Error ? error.message : String(error)}`;
+        console.error('使用AI服务时出错:', error);
+        // 凭据无效或其他错误，回退到模拟响应
+        const providerName = provider === 'openai' ? 'OpenAI' : 'Amazon Bedrock';
+        const mockResponse = `提供的${providerName}凭据似乎无效或发生了错误。这是一个模拟回复。错误详情: ${error instanceof Error ? error.message : String(error)}`;
         const stream = createMockStream(mockResponse);
         return new Response(stream);
       }
     }
     
-    // 如果没有API密钥，使用模拟响应
-    const mockResponse = generateMockResponse(messages);
+    // 如果没有有效凭据，使用模拟响应
+    const providerName = provider === 'openai' ? 'OpenAI API密钥' : 'AWS凭据';
+    const mockResponse = `系统未配置有效的${providerName}。这是一个模拟回复。\n\n${generateMockResponse(messages)}`;
     const stream = createMockStream(mockResponse);
     return new Response(stream);
     
