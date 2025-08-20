@@ -14,7 +14,7 @@ import { ChatBubble, ChatBubbleMessage, ChatBubbleAvatar, ChatBubbleActionWrappe
 interface ChatMessage {
   id: string;
   content: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   // Add reasoning and reasoningDetails fields
   reasoning?: string;
   reasoningDetails?: Record<string, any>;
@@ -24,6 +24,15 @@ interface ChatMessage {
     data: string;
     mediaType: string;
   }>;
+  // Error information
+  isError?: boolean;
+  errorDetails?: {
+    statusCode?: number;
+    message?: string;
+    rawError?: string;
+    responseBody?: string;
+    timestamp?: string;
+  };
 }
 
 export default function Chat() {
@@ -34,7 +43,7 @@ export default function Chat() {
   const awsSecretAccessKey = '';
   const awsRegion = 'us-east-1';
   const provider = 'bedrock' as const;
-  const [bedrockModel, setBedrockModel] = useState<string>('anthropic.claude-opus-4-1-20250805-v1:0');
+  const [bedrockModel, setBedrockModel] = useState<string>('us.anthropic.claude-opus-4-1-20250805-v1:0');
   // Enable reasoning for compatible Claude models
   const [enableReasoning, setEnableReasoning] = useState<boolean>(false);
   // Toggle to show reasoning details
@@ -66,7 +75,7 @@ export default function Chat() {
       
       // 处理文件附件
       if (files?.length) {
-        const attachments = [];
+        const attachments: Array<{type: 'file' | 'image', data: string, mediaType: string}> = [];
         
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
@@ -162,7 +171,36 @@ export default function Chat() {
       });
       
       if (!response.ok) {
-        throw new Error('API请求失败');
+        // 获取错误详情
+        let errorMessage = 'API请求失败';
+        let errorDetails: Record<string, any> = {};
+        let responseBody = '';
+        
+        try {
+          // 尝试读取响应体
+          responseBody = await response.text();
+          
+          // 尝试解析为JSON
+          try {
+            errorDetails = JSON.parse(responseBody);
+            errorMessage = errorDetails.message || errorDetails.error || 'API请求失败';
+          } catch {
+            // 如果不是JSON，使用响应文本作为错误消息
+            errorMessage = responseBody || 'API请求失败';
+          }
+        } catch {
+          errorMessage = `API请求失败 (${response.status})`;
+        }
+        
+        // 创建一个错误消息
+        const errorObject = new Error(errorMessage);
+        // @ts-ignore - 添加额外属性
+        errorObject.statusCode = response.status;
+        // @ts-ignore - 添加额外属性
+        errorObject.responseBody = responseBody;
+        
+        // 抛出经过增强的错误对象
+        throw errorObject;
       }
       
       // 检查响应类型
@@ -200,7 +238,62 @@ export default function Chat() {
       
     } catch (error) {
       console.error('聊天错误:', error);
+      
+      // 同时设置全局错误状态和创建错误消息气泡
       setChatError(error instanceof Error ? error : new Error('未知错误'));
+      
+      // 解析错误详情
+      let errorMessage = '与AI助手通信时出错';
+      let statusCode = 500;
+      let rawError = '';
+      let responseBody = '';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message || '未知错误';
+        // @ts-ignore - 获取可能的额外属性
+        statusCode = error.statusCode || 500;
+        // @ts-ignore - 获取可能的额外属性
+        responseBody = error.responseBody || '';
+        rawError = error.toString();
+      }
+      
+      // 创建更友好的错误信息
+      let friendlyErrorMessage = '';
+      
+      // 根据状态码和错误消息提供更友好的错误说明
+      if (statusCode === 403 && responseBody.includes("don't have access to the model")) {
+        friendlyErrorMessage = `访问被拒绝: 您没有使用所选模型(${bedrockModel})的权限。请尝试选择其他模型或联系管理员获取权限。`;
+      } else if (statusCode === 401) {
+        friendlyErrorMessage = '未授权: 请检查您的认证凭据是否有效。';
+      } else if (statusCode === 429) {
+        friendlyErrorMessage = '请求过多: 您已超出API调用限制，请稍后再试。';
+      } else if (statusCode >= 500) {
+        friendlyErrorMessage = '服务器错误: 模型服务暂时不可用，请稍后再试。';
+      } else {
+        // 默认错误消息
+        friendlyErrorMessage = `请求失败: ${errorMessage}`;
+      }
+      
+      // 获取当前时间
+      const timestamp = new Date().toLocaleTimeString();
+      
+      // 添加错误消息到聊天
+      setChatMessages(prev => [
+        ...prev,
+        {
+          id: `error-${Date.now()}`,
+          content: friendlyErrorMessage,
+          role: 'system',
+          isError: true,
+          errorDetails: {
+            statusCode,
+            message: errorMessage,
+            rawError,
+            responseBody,
+            timestamp
+          }
+        }
+      ]);
     } finally {
       setIsProcessing(false);
       setFiles(null);
@@ -387,6 +480,76 @@ export default function Chat() {
             const isUser = message.role === 'user';
             const variant = isUser ? "sent" : "received";
             
+            // 处理错误消息
+            if (message.isError) {
+              return (
+                <ChatBubble key={message.id} className="error-bubble">
+                  <ChatBubbleAvatar 
+                    fallback="❌" 
+                    className="bg-red-500/10 text-red-500"
+                  />
+                  <div className="flex flex-col w-full">
+                    <ChatBubbleMessage 
+                      className="bg-red-500/10 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/30"
+                    >
+                      <div className="flex items-center mb-1">
+                        <svg 
+                          className="w-4 h-4 mr-1.5 text-red-500" 
+                          fill="currentColor" 
+                          viewBox="0 0 20 20" 
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path 
+                            fillRule="evenodd" 
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" 
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span className="font-medium">错误信息</span>
+                      </div>
+                      <div className="text-sm">
+                        {message.content}
+                      </div>
+                      {message.errorDetails && (
+                        <div className="mt-2 text-xs text-red-500/80 flex items-center">
+                          <span className="mr-1">
+                            {message.errorDetails.timestamp}
+                          </span>
+                          {message.errorDetails.statusCode && (
+                            <span className="ml-auto bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-1.5 py-0.5 rounded-full text-xs">
+                              状态码: {message.errorDetails.statusCode}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </ChatBubbleMessage>
+                    <div className="flex items-center justify-end mt-1 gap-1">
+                      <button
+                        onClick={() => {
+                          // 根据错误类型提供不同的操作
+                          // 如果是模型权限问题，则显示模型选择器
+                          const isModelAccessError = 
+                            message.errorDetails?.statusCode === 403 && 
+                            message.errorDetails?.responseBody?.includes("don't have access to the model");
+                            
+                          if (isModelAccessError) {
+                            // 尝试自动切换到默认可访问模型
+                            setBedrockModel('anthropic.claude-3-sonnet-20240229-v1:0');
+                            // TODO: 在未来可以添加模型选择器显示逻辑
+                          }
+                        }}
+                        className="text-xs flex items-center px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors"
+                      >
+                        <RefreshCcw size={12} className="mr-1" />
+                        重试
+                      </button>
+                    </div>
+                  </div>
+                </ChatBubble>
+              );
+            }
+            
+            // 正常消息渲染
             return (
               <ChatBubble key={message.id} variant={variant}>
                 <ChatBubbleAvatar 
@@ -425,6 +588,7 @@ export default function Chat() {
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[rehypeHighlight]}
+                            // @ts-expect-error - className property not found in type
                             components={{
                               div: ({ className, children, ...props }) => (
                                 <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>
@@ -462,6 +626,7 @@ export default function Chat() {
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           rehypePlugins={[rehypeHighlight]}
+                          // @ts-expect-error - className property not found in type
                           components={{
                             div: ({ className, children, ...props }) => (
                               <div className={cn('prose prose-sm max-w-none text-sm', isUser ? 'prose-invert' : '', className)} {...props}>

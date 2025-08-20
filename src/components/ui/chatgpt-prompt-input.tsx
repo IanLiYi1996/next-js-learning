@@ -120,7 +120,8 @@ export interface PromptBoxProps extends React.TextareaHTMLAttributes<HTMLTextAre
 }
 
 export const PromptBox = React.forwardRef<HTMLTextAreaElement, PromptBoxProps>(
-  ({ className, selectedModel, onModelSelect, hideModelSelector = false, ...props }, ref) => {
+  (props, ref) => {
+    const { className, selectedModel, onModelSelect, hideModelSelector = false, ...restProps } = props;
     // ... all state and handlers are unchanged ...
     const internalTextareaRef = React.useRef<HTMLTextAreaElement>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -130,15 +131,45 @@ export const PromptBox = React.forwardRef<HTMLTextAreaElement, PromptBoxProps>(
     const [isModelPopoverOpen, setIsModelPopoverOpen] = React.useState(false);
     const [isImageDialogOpen, setIsImageDialogOpen] = React.useState(false);
     React.useImperativeHandle(ref, () => internalTextareaRef.current!, []);
-    React.useLayoutEffect(() => { const textarea = internalTextareaRef.current; if (textarea) { textarea.style.height = "auto"; const newHeight = Math.min(textarea.scrollHeight, 200); textarea.style.height = `${newHeight}px`; } }, [props.value]);
-    const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { if (props.onChange) props.onChange(e); };
+    // 从props中分离出自定义属性和标准textarea属性
+    const {
+      onFileSelect,
+      onSubmitMessage,
+      disableEnterSubmit,
+      className: _className, // 防止覆盖上面定义的className
+      ...textareaProps
+    } = restProps;
+    
+    React.useLayoutEffect(() => { const textarea = internalTextareaRef.current; if (textarea) { textarea.style.height = "auto"; const newHeight = Math.min(textarea.scrollHeight, 200); textarea.style.height = `${newHeight}px`; } }, [textareaProps.value]);
+    const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { if (textareaProps.onChange) textareaProps.onChange(e); };
     const handlePlusClick = () => { fileInputRef.current?.click(); };
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file && file.type.startsWith("image/")) { const reader = new FileReader(); reader.onloadend = () => { setImagePreview(reader.result as string); if (props.onFileSelect) props.onFileSelect(file); }; reader.readAsDataURL(file); } event.target.value = ""; };
-    const handleRemoveImage = (e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setImagePreview(null); if(fileInputRef.current) { fileInputRef.current.value = ""; } if (props.onFileSelect) props.onFileSelect(null); };
-    const hasValue = (props.value?.toString() || "").trim().length > 0 || imagePreview;
+    
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { 
+      const file = event.target.files?.[0]; 
+      if (file && file.type.startsWith("image/")) { 
+        const reader = new FileReader(); 
+        reader.onloadend = () => { 
+          setImagePreview(reader.result as string); 
+          if (onFileSelect) onFileSelect(file); 
+        }; 
+        reader.readAsDataURL(file); 
+      } 
+      event.target.value = ""; 
+    };
+    
+    const handleRemoveImage = (e: React.MouseEvent<HTMLButtonElement>) => { 
+      e.stopPropagation(); 
+      setImagePreview(null); 
+      if(fileInputRef.current) { 
+        fileInputRef.current.value = ""; 
+      } 
+      if (onFileSelect) onFileSelect(null); 
+    };
+    
+    const hasValue = (textareaProps.value?.toString() || "").trim().length > 0 || imagePreview;
     const activeTool = selectedTool ? toolsList.find(t => t.id === selectedTool) : null;
     const ActiveToolIcon = activeTool?.icon;
-
+    
     return (
       <div className={cn("flex flex-col rounded-[28px] p-2 shadow-sm transition-colors bg-white border dark:bg-[#303030] dark:border-transparent cursor-text", className)}>
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*"/>
@@ -153,10 +184,10 @@ export const PromptBox = React.forwardRef<HTMLTextAreaElement, PromptBoxProps>(
           className="custom-scrollbar w-full resize-none border-0 bg-transparent p-3 text-foreground dark:text-white placeholder:text-muted-foreground dark:placeholder:text-gray-300 focus:ring-0 focus-visible:outline-none min-h-12"
           onKeyDown={(e) => {
             // Enter 键发送消息，Shift+Enter 换行
-            if (e.key === 'Enter' && !e.shiftKey && !props.disableEnterSubmit) {
+            if (e.key === 'Enter' && !e.shiftKey && !disableEnterSubmit) {
               e.preventDefault();
-              if (hasValue && props.onSubmitMessage) {
-                props.onSubmitMessage(props.value?.toString() || "", imagePreview);
+              if (hasValue && onSubmitMessage) {
+                onSubmitMessage(textareaProps.value?.toString() || "", imagePreview);
                 setImagePreview(null);
                 if (fileInputRef.current) {
                   fileInputRef.current.value = "";
@@ -164,7 +195,7 @@ export const PromptBox = React.forwardRef<HTMLTextAreaElement, PromptBoxProps>(
               }
             }
           }} 
-          {...props} 
+          {...textareaProps} 
         />
         
         <div className="mt-0.5 p-1 pt-0">
@@ -277,8 +308,8 @@ export const PromptBox = React.forwardRef<HTMLTextAreaElement, PromptBoxProps>(
                       disabled={!hasValue} 
                       className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none bg-black text-white hover:bg-black/80 dark:bg-white dark:text-black dark:hover:bg-white/80 disabled:bg-black/40 dark:disabled:bg-[#515151]"
                       onClick={() => {
-                        if (hasValue && props.onSubmitMessage) {
-                          props.onSubmitMessage(props.value?.toString() || "", imagePreview);
+                        if (hasValue && onSubmitMessage) {
+                          onSubmitMessage(textareaProps.value?.toString() || "", imagePreview);
                           setImagePreview(null);
                           if (fileInputRef.current) {
                             fileInputRef.current.value = "";

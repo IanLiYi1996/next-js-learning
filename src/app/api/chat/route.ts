@@ -237,11 +237,47 @@ export async function POST(req: Request) {
         return textStream.toTextStreamResponse();
       } catch (error) {
         console.error('使用AI服务时出错:', error);
-        // 凭据无效或其他错误，回退到模拟响应
-        const providerName = provider === 'openai' ? 'OpenAI' : 'Amazon Bedrock';
-        const mockResponse = `提供的${providerName}凭据似乎无效或发生了错误。这是一个模拟回复。错误详情: ${error instanceof Error ? error.message : String(error)}`;
-        const stream = createMockStream(mockResponse);
-        return new Response(stream);
+        
+        // 尝试提取更具体的错误信息
+        let errorMessage = 'AI服务错误';
+        let errorCode = 500;
+        let errorDetails: Record<string, any> = {};
+        
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          
+          // 处理特定的AWS错误类型
+          // @ts-expect-error - AWS错误类型
+          if (error.name === 'AccessDeniedException') {
+            errorCode = 403;
+            errorMessage = '模型访问被拒绝';
+            // @ts-expect-error - AWS错误类型
+            errorDetails = error.details || {};
+          } 
+          // @ts-expect-error - AWS SDK v3 错误格式
+          else if (error.$metadata && error.$metadata.httpStatusCode) {
+            // AWS SDK v3 错误格式
+            // @ts-expect-error - AWS SDK v3 错误格式
+            errorCode = error.$metadata.httpStatusCode;
+          }
+        }
+        
+        // 返回结构化错误响应
+        return new Response(
+          JSON.stringify({
+            error: errorMessage,
+            code: errorCode,
+            details: errorDetails,
+            provider: provider,
+            model: bedrockModel,
+            timestamp: new Date().toISOString(),
+            message: `提供的${provider}服务访问出错。${errorMessage}`
+          }),
+          { 
+            status: errorCode,
+            headers: { 'Content-Type': 'application/json' } 
+          }
+        );
       }
     }
     
@@ -253,12 +289,40 @@ export async function POST(req: Request) {
     
   } catch (error) {
     console.error('Chat API 错误:', error);
+    
+    // 提取更详细的错误信息
+    let errorMessage = '处理请求时出错';
+    let errorCode = 500;
+    let errorDetails: Record<string, any> = {};
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // 处理特定的AWS错误类型
+      // @ts-expect-error - AWS错误类型
+      if (error.name === 'AccessDeniedException' || (error.message && error.message.includes("don't have access to the model"))) {
+        errorCode = 403;
+        errorMessage = '模型访问被拒绝';
+        // @ts-expect-error - AWS错误类型
+        errorDetails = error.$response || {};
+      } 
+      // @ts-expect-error - AWS SDK v3 错误格式
+      else if (error.$metadata && error.$metadata.httpStatusCode) {
+        // AWS SDK v3 错误格式
+        // @ts-expect-error - AWS SDK v3 错误格式
+        errorCode = error.$metadata.httpStatusCode;
+      }
+    }
+    
     return new Response(
       JSON.stringify({ 
-        error: '处理请求时出错', 
-        details: error instanceof Error ? error.message : String(error)
+        error: errorMessage,
+        code: errorCode,
+        details: errorDetails,
+        timestamp: new Date().toISOString(),
+        rawError: error instanceof Error ? error.toString() : String(error)
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: errorCode, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
