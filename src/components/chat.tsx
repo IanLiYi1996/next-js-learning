@@ -263,6 +263,14 @@ export default function Chat() {
       // 根据状态码和错误消息提供更友好的错误说明
       if (statusCode === 403 && responseBody.includes("don't have access to the model")) {
         friendlyErrorMessage = `访问被拒绝: 您没有使用所选模型(${bedrockModel})的权限。请尝试选择其他模型或联系管理员获取权限。`;
+      } else if (statusCode === 400 && responseBody.includes("throughput isn't supported")) {
+        // 处理吞吐量配置错误 - 这种情况是 Claude Opus 4.1 模型需要特殊的推理配置文件
+        const modelName = bedrockModel.split('.').pop()?.split('-').slice(0, 2).join(' ') || bedrockModel;
+        friendlyErrorMessage = `配置错误: 模型 ${modelName} 无法使用按需吞吐量调用。此模型需要使用推理配置文件(inference profile)。请选择其他模型或配置推理配置文件。`;
+      } else if (statusCode === 400 && responseBody.includes("ValidationException")) {
+        // 其他验证错误
+        const shortModelId = bedrockModel.split('.').pop()?.split('-').slice(0, 2).join(' ') || bedrockModel;
+        friendlyErrorMessage = `验证错误: 模型 ${shortModelId} 配置错误或不可用。${errorMessage}`;
       } else if (statusCode === 401) {
         friendlyErrorMessage = '未授权: 请检查您的认证凭据是否有效。';
       } else if (statusCode === 429) {
@@ -526,24 +534,82 @@ export default function Chat() {
                     <div className="flex items-center justify-end mt-1 gap-1">
                       <button
                         onClick={() => {
-                          // 根据错误类型提供不同的操作
-                          // 如果是模型权限问题，则显示模型选择器
+                          // 根据错误类型提供不同的操作和自动修复
+                          const errorResponseBody = message.errorDetails?.responseBody || '';
+                          const errorCode = message.errorDetails?.statusCode;
+                          
+                          // 模型权限问题 - 403 错误
                           const isModelAccessError = 
-                            message.errorDetails?.statusCode === 403 && 
-                            message.errorDetails?.responseBody?.includes("don't have access to the model");
+                            errorCode === 403 && 
+                            errorResponseBody.includes("don't have access to the model");
+                          
+                          // 推理配置文件问题 - 400 错误
+                          const isInferenceProfileError = 
+                            errorCode === 400 && 
+                            errorResponseBody.includes("throughput isn't supported");
                             
-                          if (isModelAccessError) {
-                            // 尝试自动切换到默认可访问模型
+                          // 根据错误类型切换到不同的默认模型
+                          if (isModelAccessError || isInferenceProfileError) {
+                            // 尝试自动切换到默认可访问模型 - Claude 3 Sonnet
                             setBedrockModel('anthropic.claude-3-sonnet-20240229-v1:0');
-                            // TODO: 在未来可以添加模型选择器显示逻辑
+                            
+                            // 提示用户正在切换模型
+                            setChatMessages(prev => [
+                              ...prev,
+                              {
+                                id: `system-${Date.now()}`,
+                                content: "已自动切换到 Claude 3 Sonnet 模型，这是一个通用性能良好的默认模型。正在尝试重新连接...",
+                                role: 'system',
+                              }
+                            ]);
+                            
+                            // 自动重试上一条消息
+                            const lastUserMessage = [...chatMessages].reverse().find(msg => msg.role === 'user');
+                            if (lastUserMessage && lastUserMessage.content) {
+                              // 创建自定义表单提交事件
+                              const syntheticEvent = { 
+                                preventDefault: () => {}, 
+                                currentTarget: document.createElement('form') 
+                              } as React.FormEvent<HTMLFormElement>;
+                              
+                              // 设置消息内容并提交
+                              setChatInput(lastUserMessage.content);
+                              setTimeout(() => handleSubmit(syntheticEvent), 500);
+                            }
                           }
                         }}
                         className="text-xs flex items-center px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors"
                       >
                         <RefreshCcw size={12} className="mr-1" />
-                        重试
+                        切换模型并重试
                       </button>
                     </div>
+                  </div>
+                </ChatBubble>
+              );
+            }
+            
+            // 系统消息 (非错误)
+            if (message.role === 'system' && !message.isError) {
+              return (
+                <ChatBubble key={message.id} className="system-bubble">
+                  <ChatBubbleAvatar 
+                    fallback="ℹ️" 
+                    className="bg-blue-500/10 text-blue-500"
+                  />
+                  <div className="flex flex-col w-full">
+                    <ChatBubbleMessage 
+                      className="bg-blue-500/10 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30"
+                    >
+                      <div className="text-sm">
+                        {message.content}
+                      </div>
+                      {message.errorDetails?.timestamp && (
+                        <div className="mt-2 text-xs text-blue-500/80">
+                          {message.errorDetails.timestamp}
+                        </div>
+                      )}
+                    </ChatBubbleMessage>
                   </div>
                 </ChatBubble>
               );
