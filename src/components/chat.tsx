@@ -75,11 +75,14 @@ export default function Chat() {
       
       // 处理文件附件
       if (files?.length) {
+        console.log(`[前端日志] 发现${files.length}个文件附件`);
         const attachments: Array<{type: 'file' | 'image', data: string, mediaType: string}> = [];
         
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           const fileReader = new FileReader();
+          const isImage = file.type.startsWith('image/');
+          console.log(`[前端日志] 文件类型: ${isImage ? '图片' : '文件'}, MIME类型: ${file.type}`);
           
           await new Promise<void>((resolve) => {
             fileReader.onloadend = () => {
@@ -87,7 +90,7 @@ export default function Chat() {
               const base64Data = result.split(',')[1];
               
               attachments.push({
-                type: file.type.startsWith('image/') ? 'image' : 'file',
+                type: isImage ? 'image' : 'file',
                 data: base64Data,
                 mediaType: file.type
               });
@@ -101,52 +104,15 @@ export default function Chat() {
         
         // 添加附件到用户消息
         userMessage.attachments = attachments;
+        console.log(`[前端日志] 成功添加${attachments.length}个附件到用户消息`);
       }
       
       setChatMessages(prev => [...prev, userMessage]);
       setChatInput('');
       setIsProcessing(true);
       
-      // 处理文件上传，转换为适当的消息格式
-      let formattedUserMessage = userMessage;
-      
-      // 如果有文件上传，将消息转换为多类型格式
-      if (files?.length) {
-        const fileAttachments: Array<{type: 'file' | 'image', data: string, mediaType: string}> = [];
-        
-        // 读取并处理文件
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          // 读取文件内容
-          const fileReader = new FileReader();
-          const fileContentPromise = new Promise<string>((resolve) => {
-            fileReader.onloadend = () => {
-              const result = fileReader.result as string;
-              // 移除 data URL 前缀
-              const base64Data = result.split(',')[1];
-              resolve(base64Data);
-            };
-          });
-          
-          fileReader.readAsDataURL(file);
-          const fileData = await fileContentPromise;
-          
-          // 确定文件类型
-          const fileType = file.type.startsWith('image/') ? 'image' : 'file';
-          
-          fileAttachments.push({
-            type: fileType,
-            data: fileData,
-            mediaType: file.type
-          });
-        }
-        
-        // 更新用户消息，添加文件附件
-        formattedUserMessage = {
-          ...userMessage,
-          attachments: fileAttachments
-        };
-      }
+      // 使用已经处理好的userMessage，不需要重复处理附件
+      const formattedUserMessage = userMessage;
       
       // 创建请求体
       const requestBody = {
@@ -157,8 +123,8 @@ export default function Chat() {
         awsRegion,
         provider,
         bedrockModel,
-        enableReasoning: enableReasoning && bedrockModel.includes('claude-3-7-sonnet'),
-        experimental_attachments: files || undefined
+        enableReasoning: enableReasoning && bedrockModel.includes('claude-3-7-sonnet')
+        // 删除experimental_attachments，因为附件已经包含在formattedUserMessage中
       };
       
       // 发送请求到API
@@ -846,20 +812,9 @@ export default function Chat() {
               currentTarget: document.createElement('form') 
             } as React.FormEvent<HTMLFormElement>;
             
-            const customOptions: Record<string, unknown> = files ? { experimental_attachments: files } : {};
+            // 已不再需要customOptions，因为附件已经在handleSubmit中处理，
+            // 通过userMessage.attachments传递，所以直接调用handleSubmit即可
             
-            // 添加 Bedrock 配置
-            customOptions.provider = provider;
-            customOptions.bedrockModel = bedrockModel;
-            
-            // 如果有 AWS 凭据，则添加到请求中
-            if (awsAccessKeyId && awsSecretAccessKey) {
-              customOptions.awsAccessKeyId = awsAccessKeyId;
-              customOptions.awsSecretAccessKey = awsSecretAccessKey;
-              customOptions.awsRegion = awsRegion;
-            }
-            
-            // The custom options are handled within the function now
             handleSubmit(syntheticEvent);
             setFiles(null);
           }}

@@ -23,12 +23,13 @@ function createMockStream(response: string) {
 }
 
 // 模拟回复生成函数
-function generateMockResponse(messages: Array<{ content: string }>) {
+function generateMockResponse(messages: Array<{ content: string | Array<any>; role?: string; attachments?: Array<any> }>) {
   const lastMessage = messages[messages.length - 1];
-  const userMessage = lastMessage?.content || '';
+  // 确保我们能够处理字符串或数组形式的content
+  const userMessage = typeof lastMessage?.content === 'string' ? lastMessage.content : '';
   
-  // 检查是否有附件
-  const hasAttachments = lastMessage?.experimental_attachments && lastMessage.experimental_attachments.length > 0;
+  // 检查是否有附件，现在通过message.attachments来判断
+  const hasAttachments = lastMessage?.attachments && Array.isArray(lastMessage.attachments) && lastMessage.attachments.length > 0;
   
   // 根据用户输入和是否有附件生成不同的响应
   if (hasAttachments) {
@@ -51,17 +52,28 @@ function generateMockResponse(messages: Array<{ content: string }>) {
   return `这是一个模拟的AI响应，因为系统中没有配置有效的OpenAI API密钥。您的问题是："${userMessage}"。要获得真实的AI回复，请配置有效的API密钥。我可以帮助回答问题、分析图片和文档，但目前我只能提供这个预设的回复。如有任何疑问，请随时提问！`;
 }
 
+// 消息附件类型定义
+interface MessageAttachment {
+  type: 'file' | 'image';
+  data: string;
+  mediaType: string;
+}
+
+// 消息内容项类型定义
+interface MessageContentItem {
+  type: 'text' | 'file' | 'image';
+  text?: string;
+  data?: string;
+  mediaType?: string;
+}
+
 interface ChatRequest {
   messages: Array<{ 
-    content: string | Array<{
-      type: 'text' | 'file' | 'image';
-      text?: string;
-      data?: string;
-      mediaType?: string;
-    }>;
+    content: string | Array<MessageContentItem>;
     role: string; 
+    attachments?: Array<MessageAttachment>;
   }>;
-  experimental_attachments?: any;
+  // 不再使用experimental_attachments字段
   apiKey?: string;
   // AWS credentials for Bedrock
   awsAccessKeyId?: string;
@@ -76,7 +88,11 @@ interface ChatRequest {
 }
 
 export async function POST(req: Request) {
+  // 打印请求内容，不包括敏感信息
+  console.log('\n[DEBUG] 接收到聊天请求');
+  
   // Extract the messages and other data from the request
+  const reqData = await req.json() as ChatRequest;
   const { 
     messages, 
     apiKey, 
@@ -85,9 +101,23 @@ export async function POST(req: Request) {
     awsRegion,
     provider = 'bedrock',  // Default to Bedrock
     bedrockModel = 'anthropic.claude-3-sonnet-20240229-v1:0',
-    enableReasoning = false,
-    experimental_attachments
-  } = await req.json() as ChatRequest;
+    enableReasoning = false
+    // 移除对experimental_attachments的引用，因为我们现在直接使用message中的attachments
+  } = reqData;
+  
+  // 检查消息是否包含附件
+  const hasAttachments = messages.some(msg => {
+    if (msg.attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+      console.log(`[DEBUG] 找到消息附件: ${msg.attachments.length}个文件`);
+      console.log(`[DEBUG] 附件类型: ${msg.attachments.map(att => att.type).join(', ')}`);
+      return true;
+    }
+    return false;
+  });
+  
+  if (!hasAttachments) {
+    console.log('[DEBUG] 消息中未找到附件');
+  }
 
   try {
     // 检查是否提供了有效的凭据
@@ -140,6 +170,17 @@ export async function POST(req: Request) {
           
           // 处理消息格式，Claude需要以用户消息开始
           // 过滤掉系统自动生成的问候消息，并处理消息格式
+          console.log(`[DEBUG] 原始消息数量: ${messages.length}`);
+          console.log(`[DEBUG] 检查原始消息是否有attachments属性:`, 
+            messages.map(m => ({
+              role: m.role,
+              hasContent: !!m.content,
+              contentType: typeof m.content,
+              hasAttachments: !!m.attachments,
+              attachmentsCount: m.attachments?.length || 0
+            }))
+          );
+          
           const filteredMessages = messages
             .filter((message, index) => {
               // 如果是第一条助手消息且是问候消息，则跳过
@@ -165,11 +206,18 @@ export async function POST(req: Request) {
                 const formattedContent = message.content.map(item => {
                   if (item.type === 'text') {
                     return { type: 'text', text: item.text };
-                  } else if (item.type === 'image' || item.type === 'file') {
+                  } else if (item.type === 'image') {
+                    return { 
+                      // 对于图片，要维持image类型以便正确传递给Bedrock
+                      type: 'image', 
+                      data: Buffer.from(item.data || '', 'base64'),
+                      mediaType: item.mediaType || 'image/jpeg'
+                    };
+                  } else if (item.type === 'file') {
                     return { 
                       type: 'file', 
                       data: Buffer.from(item.data || '', 'base64'),
-                      mediaType: item.mediaType || (item.type === 'image' ? 'image/jpeg' : 'application/octet-stream')
+                      mediaType: item.mediaType || 'application/octet-stream'
                     };
                   }
                   return item;
@@ -179,17 +227,34 @@ export async function POST(req: Request) {
               }
               
               // 处理带有附件的消息
-              if (message.attachments && Array.isArray(message.attachments)) {
-                const textContent = typeof message.content === 'string' ? message.content : '';
+              const msgWithAttachments = message as any; // 类型断言以解决引用attachments的错误
+              console.log(`[DEBUG] 检查消息是否有附件`, {
+                role: msgWithAttachments.role,
+                hasAttachments: !!msgWithAttachments.attachments,
+                attachmentsIsArray: Array.isArray(msgWithAttachments.attachments),
+                attachmentsLength: msgWithAttachments.attachments?.length
+              });
+              
+              if (msgWithAttachments.attachments && Array.isArray(msgWithAttachments.attachments)) {
+                console.log(`[DEBUG] 消息附件信息:`, 
+                  msgWithAttachments.attachments.map(a => ({ type: a.type, mediaType: a.mediaType, hasData: !!a.data }))
+                );
+                const textContent = typeof msgWithAttachments.content === 'string' ? msgWithAttachments.content : '';
                 
                 // 创建多部分内容数组
                 const formattedContent = [
                   { type: 'text', text: textContent },
-                  ...message.attachments.map(attachment => ({
-                    type: 'file',
-                    data: Buffer.from(attachment.data || '', 'base64'),
-                    mediaType: attachment.mediaType || 'application/octet-stream'
-                  }))
+                  ...msgWithAttachments.attachments.map((attachment: MessageAttachment) => {
+                    // 检测是否为图片类型
+                    const isImage = attachment.type === 'image' || 
+                                   (attachment.mediaType && attachment.mediaType.startsWith('image/'));
+                    return {
+                      // 对图片使用'image'类型，对文件使用'file'类型
+                      type: isImage ? 'image' : 'file',
+                      data: Buffer.from(attachment.data || '', 'base64'),
+                      mediaType: attachment.mediaType || (isImage ? 'image/jpeg' : 'application/octet-stream')
+                    };
+                  })
                 ];
                 
                 return { ...message, content: formattedContent };
@@ -203,7 +268,7 @@ export async function POST(req: Request) {
             // 使用 generateText 获取推理结果
             const result = await generateText({
               model: bedrockInstance(bedrockModel),
-              messages: filteredMessages,
+              messages: filteredMessages as any, // 使用类型断言解决类型不兼容问题
               temperature: 0.7,
               providerOptions: {
                 bedrock: {
@@ -226,7 +291,7 @@ export async function POST(req: Request) {
             // 正常流式响应
             textStream = await streamText({
               model: bedrockInstance(bedrockModel),
-              messages: filteredMessages,
+              messages: filteredMessages as any,
               temperature: 0.7,
               // 系统提示词
               system: "您是一个有帮助的助手，可以回答问题并分析图片和文档内容。",
@@ -241,7 +306,7 @@ export async function POST(req: Request) {
         // 尝试提取更具体的错误信息
         let errorMessage = 'AI服务错误';
         let errorCode = 500;
-        let errorDetails: Record<string, any> = {};
+        let errorDetails: Record<string, unknown> = {};
         
         if (error instanceof Error) {
           errorMessage = error.message;
@@ -293,7 +358,7 @@ export async function POST(req: Request) {
     // 提取更详细的错误信息
     let errorMessage = '处理请求时出错';
     let errorCode = 500;
-    let errorDetails: Record<string, any> = {};
+    let errorDetails: Record<string, unknown> = {};
     
     if (error instanceof Error) {
       errorMessage = error.message;
