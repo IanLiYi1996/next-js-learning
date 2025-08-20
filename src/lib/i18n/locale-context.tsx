@@ -22,22 +22,35 @@ export function LocaleProvider({
   children,
   defaultLocale: userDefaultLocale,
 }: LocaleProviderProps) {
-  // 初始化区域设置，优先级：localStorage > 浏览器语言 > 默认语言
-  const [locale, setLocaleState] = React.useState<Locale>(() => {
-    // 在服务器端直接使用默认语言
-    if (typeof window === 'undefined') {
-      return userDefaultLocale || defaultLocale;
+  // 初始化区域设置
+  // 始终使用传入的默认语言或全局默认语言作为初始状态
+  // 这确保了服务器端和客户端初始渲染一致
+  const [locale, setLocaleState] = React.useState<Locale>(
+    userDefaultLocale || defaultLocale
+  );
+  
+  // 在客户端挂载后，再根据用户偏好更新语言设置
+  // 只在组件挂载时运行一次，初始化客户端区域设置
+  // 我们使用 ref 来防止多次执行客户端初始化逻辑
+  const initializedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && !initializedRef.current) {
+      initializedRef.current = true;
+      
+      // 尝试从localStorage获取
+      const savedLocale = localStorage.getItem(LOCALE_STORAGE_KEY) as Locale | null;
+      if (savedLocale && (savedLocale === 'zh' || savedLocale === 'en')) {
+        setLocaleState(savedLocale);
+        return;
+      }
+      
+      // 如果localStorage中没有，则使用浏览器语言
+      const browserLocale = getBrowserLocale();
+      if (browserLocale !== locale) {
+        setLocaleState(browserLocale);
+      }
     }
-    
-    // 尝试从localStorage获取
-    const savedLocale = localStorage.getItem(LOCALE_STORAGE_KEY) as Locale | null;
-    if (savedLocale && (savedLocale === 'zh' || savedLocale === 'en')) {
-      return savedLocale;
-    }
-    
-    // 使用浏览器语言或默认语言
-    return getBrowserLocale();
-  });
+  }, [locale]);
 
   // 设置区域并保存到localStorage
   const setLocale = React.useCallback((newLocale: Locale) => {
