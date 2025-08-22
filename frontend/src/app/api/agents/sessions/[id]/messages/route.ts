@@ -51,10 +51,10 @@ const mockSessions = [
   }
 ];
 
-// GET /api/agents/sessions/[id] - Get a specific session by ID
+// GET /api/agents/sessions/[id]/messages - Get messages for a specific session
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -64,7 +64,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const sessionId = params.id;
+    const sessionId = (await params).id;
     
     // Find the session by ID
     const chatSession = mockSessions.find(s => s.id === sessionId);
@@ -81,16 +81,43 @@ export async function GET(
     //   return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     // }
     
+    // Parse query parameters for pagination
+    const searchParams = req.nextUrl.searchParams;
+    const limit = Number(searchParams.get('limit')) || undefined;
+    const before = searchParams.get('before') || undefined;
+    const after = searchParams.get('after') || undefined;
+    
+    // Get messages, applying pagination if specified
+    let messages = [...chatSession.messages];
+    
+    if (before) {
+      const beforeIndex = messages.findIndex(m => m.id === before);
+      if (beforeIndex !== -1) {
+        messages = messages.slice(0, beforeIndex);
+      }
+    }
+    
+    if (after) {
+      const afterIndex = messages.findIndex(m => m.id === after);
+      if (afterIndex !== -1) {
+        messages = messages.slice(afterIndex + 1);
+      }
+    }
+    
+    if (limit && limit > 0) {
+      messages = messages.slice(0, limit);
+    }
+    
     return NextResponse.json({
       success: true,
-      data: chatSession
+      data: messages
     });
   } catch (error) {
-    console.error(`Error fetching session ${params.id}:`, error);
+    console.error(`Error fetching messages for session ${(await params).id}:`, error);
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Failed to fetch session',
+        error: 'Failed to fetch messages',
         details: error instanceof Error ? error.message : String(error)
       }, 
       { status: 500 }
@@ -98,10 +125,10 @@ export async function GET(
   }
 }
 
-// PUT /api/agents/sessions/[id] - Update an existing session
-export async function PUT(
+// POST /api/agents/sessions/[id]/messages - Add a new message to a session
+export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -111,12 +138,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const sessionId = params.id;
+    const sessionId = (await params).id;
     
-    // Find the session index by ID
-    const sessionIndex = mockSessions.findIndex(s => s.id === sessionId);
+    // Find the session by ID
+    const chatSession = mockSessions.find(s => s.id === sessionId);
     
-    if (sessionIndex === -1) {
+    if (!chatSession) {
       return NextResponse.json(
         { success: false, error: 'Session not found' },
         { status: 404 }
@@ -124,81 +151,43 @@ export async function PUT(
     }
     
     // In a real implementation, verify the session belongs to the current user
-    // if (mockSessions[sessionIndex].userId !== session.user.id) {
+    // if (chatSession.userId !== session.user.id) {
     //   return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     // }
     
     // Parse request body
     const body = await req.json();
     
-    // In a real implementation, this would update the session in the database
-    // For now, return a mock response with the updated session
-    const updatedSession = {
-      ...mockSessions[sessionIndex],
-      title: body.title || mockSessions[sessionIndex].title,
-      status: body.status || mockSessions[sessionIndex].status,
-      updatedAt: new Date().toISOString()
+    // Validate required fields
+    if (!body.content || !body.role) {
+      return NextResponse.json(
+        { success: false, error: 'Content and role are required' },
+        { status: 400 }
+      );
+    }
+    
+    // In a real implementation, this would add a message to the session in the database
+    // For now, return a mock response
+    const newMessage = {
+      id: `msg-${Date.now()}`,
+      content: body.content,
+      role: body.role,
+      timestamp: new Date().toISOString(),
+      ...(body.attachments && { attachments: body.attachments }),
+      ...(body.reasoning && { reasoning: body.reasoning }),
+      ...(body.reasoningDetails && { reasoningDetails: body.reasoningDetails })
     };
     
     return NextResponse.json({
       success: true,
-      data: updatedSession
-    });
+      data: newMessage
+    }, { status: 201 });
   } catch (error) {
-    console.error(`Error updating session ${params.id}:`, error);
+    console.error(`Error adding message to session ${(await params).id}:`, error);
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Failed to update session',
-        details: error instanceof Error ? error.message : String(error)
-      }, 
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE /api/agents/sessions/[id] - Delete (archive) a session
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    // Verify authentication
-    const session = await auth();
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
-    const sessionId = params.id;
-    
-    // Find the session index by ID
-    const sessionIndex = mockSessions.findIndex(s => s.id === sessionId);
-    
-    if (sessionIndex === -1) {
-      return NextResponse.json(
-        { success: false, error: 'Session not found' },
-        { status: 404 }
-      );
-    }
-    
-    // In a real implementation, verify the session belongs to the current user
-    // if (mockSessions[sessionIndex].userId !== session.user.id) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    // }
-    
-    // In a real implementation, this would archive or delete the session from the database
-    // For now, return a success response
-    return NextResponse.json({
-      success: true,
-      message: `Session ${sessionId} deleted successfully`
-    });
-  } catch (error) {
-    console.error(`Error deleting session ${params.id}:`, error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to delete session',
+        error: 'Failed to add message',
         details: error instanceof Error ? error.message : String(error)
       }, 
       { status: 500 }

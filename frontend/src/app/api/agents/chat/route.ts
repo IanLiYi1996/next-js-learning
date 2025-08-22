@@ -4,7 +4,8 @@ import { bedrock, createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { streamText, generateText } from 'ai';
 import { auth } from '@/app/(auth)/auth';
 
-export const runtime = 'edge';
+// Use Node.js runtime for authentication compatibility
+export const runtime = 'nodejs';
 
 // Define the request body interface
 interface AgentChatRequest {

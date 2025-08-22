@@ -66,7 +66,7 @@ const mockAgents = [
 // GET /api/agents/[id] - Get a specific agent by ID
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -76,7 +76,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const agentId = params.id;
+    const agentId = (await params).id;
     
     // Find the agent by ID
     const agent = mockAgents.find(agent => agent.id === agentId);
@@ -93,7 +93,7 @@ export async function GET(
       data: agent
     });
   } catch (error) {
-    console.error(`Error fetching agent ${params.id}:`, error);
+    console.error(`Error fetching agent ${(await params).id}:`, error);
     return NextResponse.json(
       { 
         success: false, 
@@ -108,7 +108,7 @@ export async function GET(
 // PUT /api/agents/[id] - Update an existing agent
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -118,7 +118,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const agentId = params.id;
+    const agentId = (await params).id;
     
     // Find the agent index by ID
     const agentIndex = mockAgents.findIndex(agent => agent.id === agentId);
@@ -165,7 +165,7 @@ export async function PUT(
       data: updatedAgent
     });
   } catch (error) {
-    console.error(`Error updating agent ${params.id}:`, error);
+    console.error(`Error updating agent ${(await params).id}:`, error);
     return NextResponse.json(
       { 
         success: false, 
@@ -180,7 +180,7 @@ export async function PUT(
 // DELETE /api/agents/[id] - Delete an agent
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify authentication
@@ -190,7 +190,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const agentId = params.id;
+    const agentId = (await params).id;
     
     // Find the agent index by ID
     const agentIndex = mockAgents.findIndex(agent => agent.id === agentId);
@@ -209,7 +209,7 @@ export async function DELETE(
       message: `Agent ${agentId} deleted successfully`
     });
   } catch (error) {
-    console.error(`Error deleting agent ${params.id}:`, error);
+    console.error(`Error deleting agent ${(await params).id}:`, error);
     return NextResponse.json(
       { 
         success: false, 
